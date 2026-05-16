@@ -1,0 +1,11 @@
+backend/.env
+backend/parking_crm.db
+backend/parking.db
+backend/__pycache__/
+backend/*.pyc
+backend/*.pyo
+frontend/node_modules/
+frontend/dist/
+*.log
+.DS_Store
+.claude/
