@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 set -e
 
 echo "=== Установка зависимостей ==="
@@ -24,13 +24,22 @@ sed -i "s/your-secret-key-here-min-32-chars/$SECRET_KEY/" .env
 python3 -c "
 from py_vapid import Vapid
 import base64
+from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
+
 v = Vapid()
 v.generate_keys()
-priv = base64.urlsafe_b64encode(v.private_key.private_bytes_raw()).rstrip(b'=').decode()
-pub = base64.urlsafe_b64encode(v.public_key.public_bytes_raw()).rstrip(b'=').decode()
-print(f'VAPID_PRIVATE_KEY={priv}')
-print(f'VAPID_PUBLIC_KEY={pub}')
-" >> .env
+
+priv = base64.urlsafe_b64encode(
+    v.private_key.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
+).rstrip(b'=').decode()
+
+pub = base64.urlsafe_b64encode(
+    v.public_key.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+).rstrip(b'=').decode()
+
+print('VAPID_PRIVATE_KEY=' + priv)
+print('VAPID_PUBLIC_KEY=' + pub)
+" >> /opt/parking-crm/backend/.env
 
 echo "=== Заполнение БД ==="
 python3 seed_data.py
