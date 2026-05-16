@@ -1,5 +1,8 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Запрещаем горизонтальный скролл на уровне страницы */
+html, body { overflow-x: hidden; max-width: 100%; }
+
 :root {
   --sidebar-w: 220px;
   --c-bg:      #0f172a;
@@ -90,6 +93,8 @@ body { min-height: 100vh; }
   flex: 1;
   padding: 24px;
   min-height: 100vh;
+  min-width: 0;        /* flex-item не распирает layout */
+  overflow-x: hidden;
 }
 
 /* ── Cards & Sections ── */
@@ -243,7 +248,8 @@ select.form-ctrl option { background: var(--c-surface); }
   border: 1px solid var(--c-border);
   border-radius: 12px;
   padding: 40px;
-  width: 360px;
+  width: 100%;
+  max-width: 360px;
 }
 
 .login-logo {
@@ -417,10 +423,7 @@ textarea.form-ctrl { resize: vertical; min-height: 80px; }
     z-index: 200;
     overflow-y: auto;
   }
-
-  .sidebar.sidebar-open {
-    transform: translateX(0);
-  }
+  .sidebar.sidebar-open { transform: translateX(0); }
 
   /* Затемнение */
   .sidebar-backdrop {
@@ -431,69 +434,83 @@ textarea.form-ctrl { resize: vertical; min-height: 80px; }
     z-index: 150;
   }
 
-  /* Основной контент — отступ под шапку */
+  /* Основной контент */
   .main-content {
     margin-left: 0;
-    padding: 16px;
-    padding-top: calc(56px + 16px);
+    padding: 12px;
+    padding-top: calc(56px + 12px);
+    overflow-x: hidden;
   }
 
-  /* Таблицы — горизонтальный скролл */
+  /* Полный layout не расширяется за экран */
+  .app-layout { overflow-x: hidden; }
+
+  /* Таблицы — горизонтальный скролл внутри контейнера */
   .table-wrap {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    max-width: 100%;
   }
 
-  /* Статистика — 2 колонки вместо 4 */
-  .stats-row {
-    grid-template-columns: repeat(2, 1fr);
-  }
+  /* Ячейки разрешаем переносить — иначе таблица распирает экран */
+  th, td { white-space: normal; }
 
-  /* Кнопки — минимум 44px для пальца */
-  .btn {
-    min-height: 44px;
-    padding: 10px 16px;
-    font-size: 14px;
-  }
+  /* Статистика — 2 колонки */
+  .stats-row { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .stat-value { font-size: 22px; }
 
-  .btn-sm {
-    min-height: 38px;
-    padding: 8px 12px;
-    font-size: 13px;
-  }
+  /* Кнопки — минимум 44px */
+  .btn { min-height: 44px; padding: 10px 16px; font-size: 14px; }
+  .btn-sm { min-height: 38px; padding: 8px 12px; font-size: 13px; }
 
-  /* Поля форм — font-size 16px чтобы iOS не зумил при фокусе */
-  .form-ctrl {
-    font-size: 16px;
-    padding: 10px 12px;
-  }
+  /* Поля форм — 16px предотвращает зум на iOS при фокусе */
+  .form-ctrl { font-size: 16px; padding: 10px 12px; }
 
-  /* Фильтры — в столбик */
-  .filters-row {
-    flex-direction: column;
-  }
+  /* Фильтры — в колонку */
+  .filters-row { flex-direction: column; }
+  .filters-row .form-ctrl { min-width: unset; width: 100%; }
 
-  .filters-row .form-ctrl {
-    min-width: unset;
-    width: 100%;
-  }
+  /* Заголовок страницы */
+  .page-header { flex-wrap: wrap; gap: 10px; }
+  .page-title { font-size: 18px; }
 
-  /* Заголовок страницы — перенос на узких экранах */
-  .page-header {
-    flex-wrap: wrap;
-    gap: 10px;
-  }
+  /* Карточки */
+  .card { padding: 14px; }
 
-  /* Логин — на всю ширину */
+  /* Логин */
   .login-card {
-    width: calc(100% - 32px);
+    width: calc(100vw - 32px);
+    max-width: 100%;
     margin: 16px;
-    padding: 28px 20px;
+    padding: 24px 16px;
   }
 
-  /* Модальные окна — на всю ширину */
-  .modal {
-    width: calc(100% - 32px);
-    padding: 20px 16px;
+  /* Модальные окна */
+  .modal { width: calc(100vw - 32px); max-width: 100%; padding: 20px 16px; }
+
+  /* Карточный вид заявок (Incidents) */
+  .incident-cards { display: flex; flex-direction: column; gap: 10px; }
+  .incident-card {
+    background: var(--c-bg);
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .incident-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .incident-card-title { font-size: 13px; font-weight: 500; line-height: 1.4; }
+  .incident-card-lot   { font-size: 12px; color: var(--c-muted); }
+  .incident-card-meta  { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .incident-card-time  { font-size: 11px; color: var(--c-muted); margin-left: auto; }
+  .incident-card-resolution {
+    font-size: 11px; color: var(--c-muted); font-style: italic;
+    padding-top: 4px; border-top: 1px solid var(--c-border);
   }
 }

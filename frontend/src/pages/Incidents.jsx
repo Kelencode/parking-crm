@@ -21,6 +21,17 @@ const PRIORITY_OPTIONS = [
   { value: 'low', label: 'Низкий' },
 ];
 
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 768px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const h = e => setMobile(e.matches);
+    mq.addEventListener('change', h);
+    return () => mq.removeEventListener('change', h);
+  }, []);
+  return mobile;
+}
+
 // Модальное окно "Что было сделано"
 function CloseModal({ onConfirm, onCancel }) {
   const [resolution, setResolution] = useState('');
@@ -127,8 +138,41 @@ function IncidentActions({ inc, role, onRefresh }) {
   return null;
 }
 
+// Карточка заявки для мобильного
+function IncidentCard({ inc, role, onRefresh }) {
+  return (
+    <div className="incident-card">
+      <div className="incident-card-header">
+        <span style={{ fontSize: 11, color: 'var(--c-muted)' }}>#{inc.id}</span>
+        <div className="incident-card-meta">
+          <PriorityBadge priority={inc.priority} />
+          <StatusBadge status={inc.status} />
+        </div>
+      </div>
+      <div className="incident-card-lot">{inc.parking_lot?.name ?? '—'}</div>
+      <div className="incident-card-title">
+        {inc.type}
+        {inc.is_repeat && <span className="badge b-repeat" style={{ marginLeft: 6 }}>Повторно</span>}
+      </div>
+      {inc.assignee && (
+        <div style={{ fontSize: 11, color: 'var(--c-muted)' }}>Исполнитель: {inc.assignee.name}</div>
+      )}
+      {inc.resolution && (
+        <div className="incident-card-resolution">{inc.resolution}</div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+        <span className="incident-card-time">
+          {new Date(inc.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+        </span>
+        <IncidentActions inc={inc} role={role} onRefresh={onRefresh} />
+      </div>
+    </div>
+  );
+}
+
 export default function Incidents() {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [incidents, setIncidents] = useState([]);
   const [lots, setLots] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -180,7 +224,15 @@ export default function Incidents() {
           <div className="empty-state">Загрузка...</div>
         ) : incidents.length === 0 ? (
           <div className="empty-state">Заявки не найдены</div>
+        ) : isMobile ? (
+          // ── Карточный вид на мобильном ──
+          <div className="incident-cards">
+            {incidents.map(inc => (
+              <IncidentCard key={inc.id} inc={inc} role={user?.role} onRefresh={load} />
+            ))}
+          </div>
         ) : (
+          // ── Таблица на десктопе ──
           <div className="table-wrap">
             <table>
               <thead>
