@@ -502,10 +502,16 @@ textarea.form-ctrl { resize: vertical; min-height: 80px; }
     background: var(--c-bg);
     border: 1px solid var(--c-border);
     border-radius: 8px;
-    padding: 12px 14px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
     gap: 6px;
+  }
+  .incident-card-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 4px;
+    gap: 8px;
   }
   .incident-card-header {
     display: flex;

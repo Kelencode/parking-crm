@@ -160,10 +160,10 @@ function IncidentCard({ inc, role, onRefresh }) {
       {inc.resolution && (
         <div className="incident-card-resolution">{inc.resolution}</div>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-        <span className="incident-card-time">
-          {new Date(inc.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-        </span>
+      <span className="incident-card-time">
+        {new Date(inc.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+      </span>
+      <div className="incident-card-actions">
         <IncidentActions inc={inc} role={role} onRefresh={onRefresh} />
       </div>
     </div>
