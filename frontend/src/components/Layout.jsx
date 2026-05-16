@@ -166,26 +166,49 @@ export default function Layout() {
               Уведомления включены ✓
             </div>
           )}
+
           {pushStatus === 'unsupported' && (
             <div style={{ fontSize: 11, color: 'var(--c-muted)', padding: '4px 0 6px', textAlign: 'center' }}>
-              Уведомления не поддерживаются в вашем браузере
+              {isSafariOnly
+                ? 'Для уведомлений добавьте приложение на экран «Домой» через Safari'
+                : 'Push-уведомления не поддерживаются в этом браузере'}
             </div>
           )}
+
           {pushStatus === 'unsubscribed' && (
             <>
-              <button className="btn btn-secondary" style={{ width: '100%', marginBottom: 4, fontSize: 12 }}
-                onClick={handleEnablePush}>
-                Включить уведомления
-              </button>
-              {pushError && (
-                <div style={{ fontSize: 11, color: '#f87171', marginBottom: 4, lineHeight: 1.4 }}>
-                  {pushError}
+              {pushError === 'blocked' ? (
+                <div style={{ fontSize: 11, color: '#f87171', marginBottom: 6, lineHeight: 1.5 }}>
+                  Уведомления заблокированы.{' '}
+                  {isSafariOnly ? (
+                    <>Добавьте приложение на экран «Домой» через Safari, затем разрешите уведомления.</>
+                  ) : (
+                    <>Разрешите их в настройках браузера:<br/>
+                    🔒 Замок в адресной строке → Уведомления → <b>Разрешить</b></>
+                  )}
                 </div>
-              )}
-              {isSafariOnly && (
-                <div style={{ fontSize: 11, color: 'var(--c-muted)', lineHeight: 1.4, marginBottom: 4 }}>
-                  На iPhone: откройте в Safari и добавьте на экран «Домой»
-                </div>
+              ) : (
+                <>
+                  <button className="btn btn-secondary" style={{ width: '100%', marginBottom: 4, fontSize: 12 }}
+                    onClick={handleEnablePush}>
+                    Включить уведомления
+                  </button>
+                  {pushError === 'dismissed' && (
+                    <div style={{ fontSize: 11, color: '#f97316', marginBottom: 4, lineHeight: 1.4 }}>
+                      Запрос был отклонён. Нажмите ещё раз и разрешите уведомления в диалоге браузера.
+                    </div>
+                  )}
+                  {pushError && pushError !== 'dismissed' && (
+                    <div style={{ fontSize: 11, color: '#f87171', marginBottom: 4, lineHeight: 1.4 }}>
+                      {pushError}
+                    </div>
+                  )}
+                  {isSafariOnly && !pushError && (
+                    <div style={{ fontSize: 11, color: 'var(--c-muted)', lineHeight: 1.4, marginBottom: 4 }}>
+                      На iPhone: откройте в Safari и добавьте на экран «Домой»
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}

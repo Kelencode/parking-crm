@@ -27,31 +27,40 @@ export async function subscribeToPush() {
   if (!('PushManager' in window)) {
     return { error: 'Push-уведомления не поддерживаются в этом браузере' };
   }
+  if (!('Notification' in window)) {
+    return { error: 'Уведомления не поддерживаются в этом браузере' };
+  }
 
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') {
-    return { error: 'Разрешение на уведомления не получено. Разрешите уведомления в адресной строке браузера.' };
+  // Проверяем текущий статус — не запрашиваем повторно если уже denied
+  const current = Notification.permission;
+
+  if (current === 'denied') {
+    return { error: 'blocked' };
+  }
+
+  if (current !== 'granted') {
+    // Запрашиваем разрешение — ТОЛЬКО из обработчика клика (user gesture)
+    const result = await Notification.requestPermission();
+    if (result !== 'granted') {
+      // Пользователь отклонил или браузер заблокировал
+      return { error: result === 'denied' ? 'blocked' : 'dismissed' };
+    }
   }
 
   try {
     const registration = await navigator.serviceWorker.ready;
 
     const existing = await registration.pushManager.getSubscription();
-    if (existing) {
-      await existing.unsubscribe();
-    }
+    if (existing) await existing.unsubscribe();
 
-    const response = await fetch('http://127.0.0.1:8000/push/vapid-public-key');
-    const { public_key } = await response.json();
+    // Используем API-клиент — работает и локально и на проде
+    const keyResp = await api.get('/push/vapid-public-key');
+    const { public_key } = keyResp.data;
 
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(public_key),
     });
-
-    console.log('[PUSH] endpoint:', subscription.endpoint);
-    console.log('[PUSH] браузер:', navigator.userAgent);
-    console.log('[PUSH] subscription keys:', JSON.stringify(subscription.toJSON?.() ?? subscription));
 
     await api.post('/push/subscribe', { subscription_json: JSON.stringify(subscription) });
     localStorage.setItem('push_confirmed_v2', '1');
@@ -64,9 +73,9 @@ export async function subscribeToPush() {
 export async function getPushServerStatus() {
   try {
     const resp = await api.get('/push/status');
-    return resp.data.subscribed;   // true | false
+    return resp.data.subscribed;
   } catch {
-    return null;                   // нет токена / сеть недоступна — не меняем UI
+    return null;
   }
 }
 
