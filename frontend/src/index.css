@@ -36,8 +36,9 @@ body { min-height: 100vh; }
   flex-direction: column;
   position: fixed;
   top: 0; left: 0;
-  height: 100vh;
+  height: 100dvh; /* dynamic viewport height — учитывает адресную строку браузера */
   z-index: 100;
+  overflow-y: auto;
 }
 
 .sidebar-brand {
@@ -77,8 +78,12 @@ body { min-height: 100vh; }
 }
 
 .sidebar-footer {
+  margin-top: auto;
   padding: 12px;
   border-top: 1px solid var(--c-border);
+  position: sticky;
+  bottom: 0;
+  background: var(--c-surface); /* перекрывает прокрученный nav */
 }
 
 .sidebar-user {
@@ -422,6 +427,9 @@ textarea.form-ctrl { resize: vertical; min-height: 80px; }
     transition: transform 0.25s ease;
     z-index: 200;
     overflow-y: auto;
+    height: 100dvh;
+    /* Фолбэк для браузеров без dvh — запас снизу под адресную строку */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .sidebar.sidebar-open { transform: translateX(0); }
 
