@@ -356,6 +356,25 @@ textarea.form-ctrl { resize: vertical; min-height: 80px; }
   margin-top: 16px;
 }
 
+/* ── Inline table cell inputs (Journal excel-like editing) ── */
+.cell-inp, .cell-sel {
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  color: var(--c-text);
+  font-size: 12px;
+  padding: 3px 6px;
+  width: 100%;
+  outline: none;
+  font-family: inherit;
+  transition: border-color .15s;
+}
+.cell-inp:focus, .cell-sel:focus { border-color: var(--c-accent); }
+.cell-sel { cursor: pointer; }
+.cell-inp::placeholder { color: var(--c-muted); opacity: .6; }
+.row-editing td { background: rgba(234,179,8,.08) !important; }
+.row-error td   { background: rgba(239,68,68,.1) !important; }
+
 /* ── is_repeat badge ── */
 .b-repeat {
   background: #7f1d1d;

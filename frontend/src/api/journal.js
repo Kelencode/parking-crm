@@ -8,6 +8,10 @@ export function createJournalEntry(data) {
   return api.post('/journal', data);
 }
 
+export function updateJournalEntry(id, data) {
+  return api.patch(`/journal/${id}`, data);
+}
+
 export function deleteJournalEntry(id) {
   return api.delete(`/journal/${id}`);
 }

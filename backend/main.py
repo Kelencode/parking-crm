@@ -339,6 +339,16 @@ class JournalEntryCreate(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class JournalEntryUpdate(BaseModel):
+    parking_lot_id: Optional[int] = None
+    operation: Optional[JournalOperation] = None
+    grz: Optional[str] = Field(default=None, max_length=20)
+    reason: Optional[JournalReason] = None
+    note: Optional[str] = Field(default=None, max_length=300)
+    ticket_number: Optional[str] = Field(default=None, max_length=20)
+    created_at: Optional[datetime] = None
+
+
 class JournalEntryOut(BaseModel):
     id: int
     created_at: datetime
@@ -1324,6 +1334,39 @@ async def delete_journal_entry(
         raise HTTPException(404, "Journal entry not found")
     await db.delete(entry)
     await db.commit()
+
+
+@app.patch("/journal/{entry_id}", response_model=JournalEntryOut)
+async def update_journal_entry(
+    entry_id: int,
+    data: JournalEntryUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role not in (UserRole.dispatcher, UserRole.admin):
+        raise HTTPException(403, "Только диспетчеры и администраторы могут редактировать записи")
+    result = await db.execute(
+        select(JournalEntry)
+        .options(selectinload(JournalEntry.parking_lot), selectinload(JournalEntry.creator))
+        .where(JournalEntry.id == entry_id)
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(404, "Journal entry not found")
+    updates = data.model_dump(exclude_none=True)
+    if "created_at" in updates:
+        updates["created_at"] = strip_tz(updates["created_at"])
+    if "grz" in updates:
+        updates["grz"] = updates["grz"].strip().upper()
+    for field, value in updates.items():
+        setattr(entry, field, value)
+    await db.commit()
+    result = await db.execute(
+        select(JournalEntry)
+        .options(selectinload(JournalEntry.parking_lot), selectinload(JournalEntry.creator))
+        .where(JournalEntry.id == entry_id)
+    )
+    return result.scalar_one()
 
 
 # ---------- WebSocket ----------
