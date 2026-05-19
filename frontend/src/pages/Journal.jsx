@@ -81,13 +81,19 @@ function OpToggle({ value, onChange }) {
 // ── EditableRow — shared between draft and edit-existing ─────────────────────
 
 function EditableRow({ vals, onChange, onSave, onCancel, onDelete, onBlurRow,
-  lots, grzListId, isNew, saving, hasError, isAdmin, creatorName, grzRef, rowId }) {
+  lots, grzListId, isNew, saving, hasError, isAdmin, creatorName, grzRef, rowId, onLastTab }) {
   const activeLots = lots.filter(l => l.is_active !== false);
   const rowClass = hasError ? 'row-error' : 'row-editing';
 
   function kd(e) {
     if (e.key === 'Enter') { e.preventDefault(); onSave(); }
     if (e.key === 'Escape') { onCancel(); }
+  }
+
+  function kdLast(e) {
+    if (e.key === 'Enter') { e.preventDefault(); onSave(); }
+    if (e.key === 'Escape') { onCancel(); }
+    if (e.key === 'Tab' && !e.shiftKey && onLastTab) { e.preventDefault(); onLastTab(); }
   }
 
   return (
@@ -131,7 +137,7 @@ function EditableRow({ vals, onChange, onSave, onCancel, onDelete, onBlurRow,
       {/* Билет */}
       <td style={{ minWidth: 82 }}>
         <input className="cell-inp" value={vals.ticket_number} maxLength={20}
-          placeholder="—" onChange={e => onChange('ticket_number', e.target.value)} onKeyDown={kd} />
+          placeholder="—" onChange={e => onChange('ticket_number', e.target.value)} onKeyDown={kdLast} />
       </td>
       {/* Кто внёс */}
       <td style={{ fontSize: 12, color: 'var(--c-muted)', whiteSpace: 'nowrap' }}>
@@ -395,12 +401,13 @@ export default function Journal() {
       const activeEl = document.activeElement;
       const draftRow = document.getElementById('draft-row');
       if (draftRow && draftRow.contains(activeEl)) return;
-      // Focus left the draft row — reset if incomplete, never auto-save
-      if (!isValid(draftRef.current)) {
+      // Focus left the row — only reset if incomplete, NEVER save
+      const d = draftRef.current;
+      if (!(d.parking_lot_id && d.operation && d.grz?.trim() && d.reason)) {
         setDraft(emptyDraft());
         setDraftError(false);
       }
-    }, 100);
+    }, 150);
   }
 
   // ── Edit existing row handlers ──────────────────────────────────────────────
@@ -593,6 +600,7 @@ export default function Journal() {
                       onChange={updDraft}
                       onSave={saveDraft}
                       onCancel={cancelDraft}
+                      onLastTab={saveDraft}
                       onBlurRow={handleDraftBlur}
                       lots={lots}
                       grzListId="grz-list"
