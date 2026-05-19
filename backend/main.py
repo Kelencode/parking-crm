@@ -1227,9 +1227,10 @@ async def list_journal(
         .options(selectinload(JournalEntry.parking_lot), selectinload(JournalEntry.creator))
     )
     if date_from:
-        query = query.where(JournalEntry.created_at >= date_from)
+        query = query.where(JournalEntry.created_at >= datetime.strptime(date_from, "%Y-%m-%d"))
     if date_to:
-        query = query.where(JournalEntry.created_at <= date_to + " 23:59:59")
+        dt_to = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+        query = query.where(JournalEntry.created_at <= dt_to)
     if parking_lot_id:
         query = query.where(JournalEntry.parking_lot_id == parking_lot_id)
     if operation:
@@ -1265,7 +1266,8 @@ async def create_journal_entry(
         created_by=current_user.id,
     )
     if data.created_at:
-        entry.created_at = data.created_at
+        from datetime import timezone as _tz
+        entry.created_at = data.created_at.astimezone(_tz.utc).replace(tzinfo=None)
 
     db.add(entry)
     await db.flush()
