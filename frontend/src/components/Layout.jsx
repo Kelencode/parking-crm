@@ -6,6 +6,7 @@ import { connect as wsConnect, disconnect as wsDisconnect, subscribe as wsSubscr
 const ADMIN_LINKS = [
   { to: '/dashboard',    label: 'Дашборд'        },
   { to: '/incidents',    label: 'Заявки'          },
+  { to: '/journal',      label: 'Журнал'          },
   { to: '/history',      label: 'История'         },
   { to: '/parking-lots', label: 'Стоянки'         },
   { to: '/reports',      label: 'Отчёты'          },
@@ -16,6 +17,7 @@ const ADMIN_LINKS = [
 const DISPATCHER_LINKS = [
   { to: '/dashboard',    label: 'Дашборд'  },
   { to: '/incidents',    label: 'Заявки'   },
+  { to: '/journal',      label: 'Журнал'   },
   { to: '/history',      label: 'История'  },
   { to: '/parking-lots', label: 'Стоянки'  },
   { to: '/reports',      label: 'Отчёты'   },

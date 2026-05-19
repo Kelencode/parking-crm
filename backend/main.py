@@ -28,6 +28,7 @@ from database import Base, engine, get_db, settings
 from models import (
     AuditAction, AuditLog,
     Incident, IncidentPriority, IncidentStatus, IncidentType,
+    JournalEntry, JournalOperation, JournalReason,
     LotType, Software,
     ParkingLot, ShiftNote, ShiftSnapshot, User, UserRole,
 )
@@ -118,6 +119,17 @@ class ConnectionManager:
                     await ws.send_text(data)
                 except Exception:
                     dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws)
+
+    async def broadcast_to_all(self, message: dict) -> None:
+        data = json.dumps(message, ensure_ascii=False)
+        dead = []
+        for ws in list(self._connections.keys()):
+            try:
+                await ws.send_text(data)
+            except Exception:
+                dead.append(ws)
         for ws in dead:
             self.disconnect(ws)
 
@@ -297,6 +309,31 @@ class AuditLogOut(BaseModel):
     entity_id: Optional[int] = None
     details: Optional[str] = None
     created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class JournalEntryCreate(BaseModel):
+    parking_lot_id: int
+    operation: JournalOperation
+    grz: str = Field(max_length=20)
+    reason: JournalReason
+    note: Optional[str] = Field(default=None, max_length=300)
+    ticket_number: Optional[str] = Field(default=None, max_length=20)
+    created_at: Optional[datetime] = None
+
+
+class JournalEntryOut(BaseModel):
+    id: int
+    created_at: datetime
+    parking_lot_id: int
+    parking_lot: Optional[ParkingLotOut] = None
+    operation: JournalOperation
+    grz: str
+    reason: JournalReason
+    note: Optional[str] = None
+    ticket_number: Optional[str] = None
+    created_by: int
+    creator: Optional[UserOut] = None
     model_config = {"from_attributes": True}
 
 
@@ -974,6 +1011,91 @@ async def report_snapshots(
     )
 
 
+@app.get("/reports/journal")
+async def report_journal(
+    date_from: str = Query(...),
+    date_to:   str = Query(...),
+    lot_id:    Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role not in (UserRole.dispatcher, UserRole.admin):
+        raise HTTPException(403, "Только диспетчеры и администраторы могут скачивать отчёты")
+
+    query = (
+        select(JournalEntry)
+        .options(selectinload(JournalEntry.parking_lot), selectinload(JournalEntry.creator))
+        .where(JournalEntry.created_at >= date_from)
+        .where(JournalEntry.created_at <= date_to + " 23:59:59")
+    )
+    if lot_id is not None:
+        query = query.where(JournalEntry.parking_lot_id == lot_id)
+    result = await db.execute(query.order_by(JournalEntry.created_at))
+    entries = result.scalars().all()
+
+    lot_name = ""
+    if lot_id is not None:
+        lot_r = await db.execute(select(ParkingLot).where(ParkingLot.id == lot_id))
+        lot = lot_r.scalar_one_or_none()
+        if lot:
+            lot_name = lot.name
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Журнал"
+    ws.freeze_panes = "A2"
+
+    headers = ["№", "Дата", "Время", "Стоянка", "Операция", "ГРЗ",
+               "Основание", "Примечание", "Билет", "Кто внёс"]
+    ws.append(headers)
+    for col_idx, _ in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = _xlsx_header_fill()
+        cell.font = _xlsx_header_font()
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.row_dimensions[1].height = 28
+
+    ENTRY_FILL = {
+        "въезд": PatternFill("solid", fgColor="DBEAFE"),
+        "выезд": PatternFill("solid", fgColor="DCFCE7"),
+    }
+
+    for row_idx, e in enumerate(entries, 2):
+        op = e.operation.value if hasattr(e.operation, "value") else e.operation
+        row = [
+            e.id,
+            e.created_at.strftime("%d.%m.%Y"),
+            e.created_at.strftime("%H:%M"),
+            e.parking_lot.name if e.parking_lot else "",
+            op,
+            e.grz,
+            e.reason.value if hasattr(e.reason, "value") else e.reason,
+            e.note or "",
+            e.ticket_number or "",
+            e.creator.name if e.creator else "",
+        ]
+        ws.append(row)
+        fill = ENTRY_FILL.get(op, _xlsx_row_fill(row_idx))
+        for col_idx in range(1, len(headers) + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.fill = fill
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+
+    _xlsx_auto_width(ws)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    safe_lot = lot_name.replace(" ", "_") if lot_name else ""
+    prefix = f"journal_{safe_lot}_" if safe_lot else "journal_"
+    filename = f"{prefix}{date_from}_{date_to}.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ---------- Shift notes ----------
 
 @app.get("/shift-notes", response_model=list[ShiftNoteOut])
@@ -1084,6 +1206,106 @@ async def get_shift_snapshots(
         .order_by(ShiftSnapshot.shift_type)
     )
     return result.scalars().all()
+
+
+# ---------- Journal ----------
+
+@app.get("/journal", response_model=list[JournalEntryOut])
+async def list_journal(
+    date_from:      Optional[str]              = None,
+    date_to:        Optional[str]              = None,
+    parking_lot_id: Optional[int]              = None,
+    operation:      Optional[JournalOperation] = None,
+    reason:         Optional[JournalReason]    = None,
+    limit:          int                        = Query(default=200, le=1000),
+    offset:         int                        = 0,
+    db: AsyncSession = Depends(get_db),
+    _:  User         = Depends(get_current_user),
+):
+    query = (
+        select(JournalEntry)
+        .options(selectinload(JournalEntry.parking_lot), selectinload(JournalEntry.creator))
+    )
+    if date_from:
+        query = query.where(JournalEntry.created_at >= date_from)
+    if date_to:
+        query = query.where(JournalEntry.created_at <= date_to + " 23:59:59")
+    if parking_lot_id:
+        query = query.where(JournalEntry.parking_lot_id == parking_lot_id)
+    if operation:
+        query = query.where(JournalEntry.operation == operation)
+    if reason:
+        query = query.where(JournalEntry.reason == reason)
+    query = query.order_by(JournalEntry.created_at.desc()).limit(limit).offset(offset)
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+@app.post("/journal", response_model=JournalEntryOut, status_code=201)
+async def create_journal_entry(
+    data: JournalEntryCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role not in (UserRole.dispatcher, UserRole.admin):
+        raise HTTPException(403, "Только диспетчеры и администраторы могут создавать записи")
+
+    lot_r = await db.execute(select(ParkingLot).where(ParkingLot.id == data.parking_lot_id))
+    lot = lot_r.scalar_one_or_none()
+    if not lot:
+        raise HTTPException(404, "Parking lot not found")
+
+    entry = JournalEntry(
+        parking_lot_id=data.parking_lot_id,
+        operation=data.operation,
+        grz=data.grz.strip().upper(),
+        reason=data.reason,
+        note=data.note or None,
+        ticket_number=data.ticket_number or None,
+        created_by=current_user.id,
+    )
+    if data.created_at:
+        entry.created_at = data.created_at
+
+    db.add(entry)
+    await db.flush()
+    await db.commit()
+
+    result = await db.execute(
+        select(JournalEntry)
+        .options(selectinload(JournalEntry.parking_lot), selectinload(JournalEntry.creator))
+        .where(JournalEntry.id == entry.id)
+    )
+    entry_out = result.scalar_one()
+
+    await manager.broadcast_to_all({
+        "type": "new_journal_entry",
+        "data": {
+            "id": entry_out.id,
+            "lot_name": lot.name,
+            "operation": data.operation,
+            "grz": entry_out.grz,
+            "created_by": current_user.id,
+        },
+    })
+
+    return entry_out
+
+
+@app.delete("/journal/{entry_id}", status_code=204)
+async def delete_journal_entry(
+    entry_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.admin:
+        raise HTTPException(403, "Только администраторы могут удалять записи")
+    result = await db.execute(select(JournalEntry).where(JournalEntry.id == entry_id))
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(404, "Journal entry not found")
+    await db.delete(entry)
+    await db.commit()
 
 
 # ---------- WebSocket ----------

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { downloadIncidentsReport, downloadSnapshotsReport } from '../api/reports';
+import { downloadJournalReport } from '../api/journal';
 import { getParkingLots } from '../api/parkingLots';
 
 function localDateStr(d) {
@@ -165,6 +166,72 @@ function SnapshotsBlock() {
   );
 }
 
+function JournalBlock({ lots }) {
+  const today = localDateStr(new Date());
+  const [dateFrom, setDateFrom] = useState(firstOfMonth());
+  const [dateTo,   setDateTo]   = useState(today);
+  const [lotId,    setLotId]    = useState('');
+  const [busy,     setBusy]     = useState(false);
+  const [error,    setError]    = useState('');
+
+  const activeLots = lots.filter(l => l.is_active !== false);
+  const selectedLot = activeLots.find(l => String(l.id) === lotId);
+
+  async function handleDownload() {
+    if (!dateFrom || !dateTo) return;
+    if (dateFrom > dateTo) { setError('Дата начала не может быть позже даты конца'); return; }
+    setError('');
+    setBusy(true);
+    try {
+      await downloadJournalReport(dateFrom, dateTo, lotId || null, selectedLot?.name || '');
+    } catch (e) {
+      setError(e.response?.data?.detail ?? 'Ошибка при формировании отчёта');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h2 style={{ margin: '0 0 6px', fontSize: 15 }}>Журнал ручных открытий</h2>
+      <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--c-muted)' }}>
+        Записи электронного журнала: въезды и выезды по ручному открытию шлагбаума с указанием ГРЗ, основания и исполнителя.
+      </p>
+
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div>
+          <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>С</label>
+          <input type="date" className="form-ctrl" value={dateFrom} max={today}
+            onChange={e => setDateFrom(e.target.value)} style={{ width: 160 }} />
+        </div>
+        <div>
+          <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>По</label>
+          <input type="date" className="form-ctrl" value={dateTo} max={today}
+            onChange={e => setDateTo(e.target.value)} style={{ width: 160 }} />
+        </div>
+        <div>
+          <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Стоянка</label>
+          <select className="form-ctrl" value={lotId} onChange={e => setLotId(e.target.value)}
+            style={{ width: 200 }}>
+            <option value="">Все стоянки</option>
+            {activeLots.map(l => (
+              <option key={l.id} value={String(l.id)}>{l.name}</option>
+            ))}
+          </select>
+        </div>
+        <button className="btn btn-primary" onClick={handleDownload}
+          disabled={busy || !dateFrom || !dateTo} style={{ marginBottom: 1 }}>
+          {busy ? 'Формирование...' : 'Скачать xlsx'}
+        </button>
+      </div>
+
+      {error && (
+        <div style={{ marginTop: 10, fontSize: 13, color: '#f87171' }}>{error}</div>
+      )}
+    </div>
+  );
+}
+
 export default function Reports() {
   const [lots, setLots] = useState([]);
 
@@ -180,6 +247,7 @@ export default function Reports() {
 
       <IncidentsBlock lots={lots} />
       <SnapshotsBlock />
+      <JournalBlock lots={lots} />
     </div>
   );
 }

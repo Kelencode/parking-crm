@@ -57,6 +57,20 @@ class IncidentType(str, PyEnum):
     other         = "Другое"
 
 
+class JournalOperation(str, PyEnum):
+    entry = "въезд"
+    exit  = "выезд"
+
+
+class JournalReason(str, PyEnum):
+    disabled  = "Инвалид"
+    staff     = "Сотрудник ГЦУП"
+    manual    = "Ручное открытие (сбой)"
+    ambulance = "Скорая помощь"
+    police    = "Полиция"
+    other     = "Другое"
+
+
 class AuditAction(str, PyEnum):
     login              = "login"
     incident_created   = "incident_created"
@@ -166,3 +180,20 @@ class ShiftSnapshot(Base):
     is_auto:        Mapped[bool]          = mapped_column(Boolean, default=False)
 
     creator: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by])
+
+
+class JournalEntry(Base):
+    __tablename__ = "journal_entries"
+
+    id:             Mapped[int]              = mapped_column(Integer, primary_key=True, index=True)
+    created_at:     Mapped[datetime]         = mapped_column(DateTime, server_default=func.now())
+    parking_lot_id: Mapped[int]              = mapped_column(ForeignKey("parking_lots.id"), nullable=False)
+    operation:      Mapped[JournalOperation] = mapped_column(Enum(JournalOperation), nullable=False)
+    grz:            Mapped[str]              = mapped_column(String(20), nullable=False)
+    reason:         Mapped[JournalReason]    = mapped_column(Enum(JournalReason), nullable=False)
+    note:           Mapped[Optional[str]]    = mapped_column(String(300), nullable=True)
+    ticket_number:  Mapped[Optional[str]]    = mapped_column(String(20), nullable=True)
+    created_by:     Mapped[int]              = mapped_column(ForeignKey("users.id"), nullable=False)
+
+    parking_lot: Mapped["ParkingLot"] = relationship("ParkingLot")
+    creator:     Mapped["User"]       = relationship("User", foreign_keys=[created_by])

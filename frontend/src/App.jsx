@@ -12,6 +12,7 @@ import AuditLog from './pages/AuditLog';
 import Users from './pages/Users';
 import ParkingLots from './pages/ParkingLots';
 import Reports from './pages/Reports';
+import Journal from './pages/Journal';
 
 function AppShell() {
   const { user } = useAuth();
@@ -25,6 +26,11 @@ function AppShell() {
           <Route path="new-incident" element={
             <PrivateRoute allowedRoles={['dispatcher', 'admin']}>
               <NewIncident />
+            </PrivateRoute>
+          } />
+          <Route path="journal" element={
+            <PrivateRoute allowedRoles={['dispatcher', 'admin', 'tech']}>
+              <Journal />
             </PrivateRoute>
           } />
           <Route path="history" element={<History />} />
