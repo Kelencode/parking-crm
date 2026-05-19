@@ -81,7 +81,7 @@ function OpToggle({ value, onChange }) {
 // ── EditableRow — shared between draft and edit-existing ─────────────────────
 
 function EditableRow({ vals, onChange, onSave, onCancel, onDelete, onBlurRow,
-  lots, grzListId, isNew, saving, hasError, isAdmin, creatorName, grzRef }) {
+  lots, grzListId, isNew, saving, hasError, isAdmin, creatorName, grzRef, rowId }) {
   const activeLots = lots.filter(l => l.is_active !== false);
   const rowClass = hasError ? 'row-error' : 'row-editing';
 
@@ -91,7 +91,7 @@ function EditableRow({ vals, onChange, onSave, onCancel, onDelete, onBlurRow,
   }
 
   return (
-    <tr className={rowClass} onBlur={onBlurRow}>
+    <tr id={rowId} className={rowClass} onBlur={onBlurRow}>
       {/* Время */}
       <td style={{ minWidth: 82 }}>
         <input type="time" className="cell-inp" value={vals.time}
@@ -301,6 +301,8 @@ export default function Journal() {
   const [prefill, setPrefill]       = useState(null);
 
   const draftGrzRef = useRef(null);
+  const draftRef    = useRef(draft);
+  useEffect(() => { draftRef.current = draft; }, [draft]);
 
   const todayStr = localDateStr(new Date());
   const dateStr  = localDateStr(selectedDate);
@@ -388,9 +390,17 @@ export default function Journal() {
     setDraftError(false);
   }
 
-  function handleDraftBlur(e) {
-    const inside = e.currentTarget.contains(e.relatedTarget);
-    if (!inside && isValid(draft)) saveDraft();
+  function handleDraftBlur() {
+    setTimeout(() => {
+      const activeEl = document.activeElement;
+      const draftRow = document.getElementById('draft-row');
+      if (draftRow && draftRow.contains(activeEl)) return;
+      // Focus left the draft row — reset if incomplete, never auto-save
+      if (!isValid(draftRef.current)) {
+        setDraft(emptyDraft());
+        setDraftError(false);
+      }
+    }, 100);
   }
 
   // ── Edit existing row handlers ──────────────────────────────────────────────
@@ -578,6 +588,7 @@ export default function Journal() {
                   {/* ── Draft (new entry) row ── */}
                   {canEdit && (
                     <EditableRow
+                      rowId="draft-row"
                       vals={draft}
                       onChange={updDraft}
                       onSave={saveDraft}
