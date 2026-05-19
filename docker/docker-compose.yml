@@ -1,30 +1,46 @@
-version: "3.9"
+version: '3.8'
 
 services:
+
   db:
     image: postgres:16-alpine
-    restart: unless-stopped
+    restart: always
     environment:
+      POSTGRES_USER: parking_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: parking_crm
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parking_user -d parking_crm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   backend:
     build:
-      context: ../backend
-      dockerfile: ../docker/Dockerfile.backend
-    restart: unless-stopped
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    restart: always
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/parking_crm
-      SECRET_KEY: change-me-in-production
+      DATABASE_URL: postgresql+asyncpg://parking_user:${DB_PASSWORD}@db/parking_crm
+      SECRET_KEY: ${SECRET_KEY}
+    volumes:
+      - ./data:/app/data
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    restart: always
     ports:
-      - "8000:8000"
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
 
 volumes:
-  pgdata:
+  postgres_data:

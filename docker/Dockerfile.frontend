@@ -1,0 +1,19 @@
+# ── Stage 1: сборка ──────────────────────────────────────────────────────────
+FROM node:20-slim AS builder
+
+WORKDIR /app
+
+# контекст сборки = корень проекта (../), поэтому пути — frontend/...
+COPY frontend/package*.json ./
+RUN npm install
+
+COPY frontend/ .
+
+ARG VITE_API_URL=/api
+RUN npm run build
+
+# ── Stage 2: nginx ────────────────────────────────────────────────────────────
+FROM nginx:alpine
+
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
