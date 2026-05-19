@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { getIncidents, acceptIncident, closeIncident } from '../api/incidents';
 import { getParkingLots } from '../api/parkingLots';
 import { useAuth } from '../context/AuthContext';
+import { subscribe as wsSubscribe } from '../api/websocket';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import api from '../api/client';
@@ -194,6 +195,11 @@ export default function Incidents() {
   useEffect(() => {
     setLoading(true);
     load().catch(console.error).finally(() => setLoading(false));
+
+    const unsub = wsSubscribe(msg => {
+      if (msg.type === 'new_incident') load().catch(console.error);
+    });
+    return unsub;
   }, [filters]);
 
   function setFilter(key, val) {

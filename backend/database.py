@@ -4,14 +4,10 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    database_url: str = "sqlite+aiosqlite:///./parking_crm.db"
+    database_url: str = "postgresql+asyncpg://parking_user:parking_secure_pass_2026@localhost/parking_crm"
     secret_key: str = "change-me-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 8
-    vapid_private_key: str = ""
-    vapid_public_key: str = ""
-    vapid_public_key_raw: str = ""
-    vapid_contact: str = "admin@parking.ru"
 
     class Config:
         env_file = ".env"
@@ -19,7 +15,13 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-engine = create_async_engine(settings.database_url, echo=False)
+engine = create_async_engine(
+    settings.database_url,
+    echo=False,
+    pool_pre_ping=True,
+    pool_size=10,
+    max_overflow=20,
+)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 

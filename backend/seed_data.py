@@ -1,7 +1,7 @@
 """
 Сидирование базы данных реальными данными стоянок и тестовыми пользователями.
 Запуск: python seed_data.py
-Внимание: удаляет пользователей, стоянки и инциденты, НО сохраняет push_subscriptions.
+Внимание: удаляет пользователей, стоянки, инциденты и журнал аудита.
 """
 import asyncio
 import os
@@ -89,14 +89,13 @@ async def seed() -> None:
         await conn.run_sync(Base.metadata.create_all)
 
     async with AsyncSessionLocal() as db:
-        # Удаляем только данные, push_subscriptions не трогаем
         await db.execute(delete(AuditLog))
         await db.execute(delete(Incident))
         await db.execute(delete(ShiftNote))
         await db.execute(delete(User))
         await db.execute(delete(ParkingLot))
         await db.commit()
-        print("    Старые данные очищены (подписки сохранены)")
+        print("    Старые данные очищены")
 
     async with AsyncSessionLocal() as db:
         print("[2/3] Создаём пользователей...")

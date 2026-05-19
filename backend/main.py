@@ -1,7 +1,6 @@
 import asyncio
 import io
 import json
-import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Annotated, Optional
@@ -9,7 +8,7 @@ from typing import Annotated, Optional
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import Response
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -30,38 +29,29 @@ from models import (
     AuditAction, AuditLog,
     Incident, IncidentPriority, IncidentStatus, IncidentType,
     LotType, Software,
-    ParkingLot, PushSubscription, ShiftNote, ShiftSnapshot, User, UserRole,
+    ParkingLot, ShiftNote, ShiftSnapshot, User, UserRole,
 )
 from utils import calculate_priority, log_action
 
 
 def _migrate(conn) -> None:
-    """Добавляет новые колонки в существующие таблицы (без потери данных).
-
-    SQLite не поддерживает CURRENT_TIMESTAMP как DEFAULT в ALTER TABLE,
-    поэтому created_at добавляется с NULL и затем заполняется отдельным UPDATE.
-    """
+    """Добавляет новые колонки в существующие таблицы (без потери данных)."""
     migrations = [
-        "ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1",
-        "ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT 0",
-        "ALTER TABLE users ADD COLUMN created_at DATETIME",
+        "ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT true",
+        "ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT false",
+        "ALTER TABLE users ADD COLUMN created_at TIMESTAMP",
+        "ALTER TABLE parking_lots ADD COLUMN is_active BOOLEAN DEFAULT true",
+        "ALTER TABLE parking_lots ADD COLUMN notes TEXT",
     ]
     for sql in migrations:
         try:
             conn.execute(text(sql))
         except Exception:
             pass  # колонка уже существует
-    # Заполняем created_at для строк без значения
-    conn.execute(text("UPDATE users SET created_at = datetime('now') WHERE created_at IS NULL"))
-    # parking_lots
-    for sql in [
-        "ALTER TABLE parking_lots ADD COLUMN is_active BOOLEAN DEFAULT 1",
-        "ALTER TABLE parking_lots ADD COLUMN notes TEXT",
-    ]:
-        try:
-            conn.execute(text(sql))
-        except Exception:
-            pass
+    try:
+        conn.execute(text("UPDATE users SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
+    except Exception:
+        pass
 
 
 @asynccontextmanager
@@ -106,132 +96,33 @@ app.add_middleware(_SecurityHeadersMiddleware)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 
-# ---------- Push helpers ----------
+# ---------- WebSocket connection manager ----------
 
-def _send_push_fcm(sub_info: dict, payload_str: str, private_key: str, vapid_contact: str) -> None:
-    """FCM / Mozilla push — стандартный pywebpush."""
-    from pywebpush import webpush, WebPushException
-    try:
-        webpush(
-            subscription_info=sub_info,
-            data=payload_str,
-            vapid_private_key=private_key,
-            vapid_claims={"sub": "mailto:" + vapid_contact},
-            ttl=86400,
-            content_encoding="aes128gcm",
-        )
-    except WebPushException as e:
-        resp_text = getattr(getattr(e, "response", None), "text", "")
-        raise RuntimeError(f"WebPushException: {e}" + (f" | {resp_text[:300]}" if resp_text else "")) from e
+class ConnectionManager:
+    def __init__(self):
+        self._connections: dict[WebSocket, str] = {}
 
+    async def connect(self, ws: WebSocket, role: str) -> None:
+        await ws.accept()
+        self._connections[ws] = role
 
-def _send_push_wns(sub_info: dict, payload_str: str, private_key: str, vapid_contact: str) -> None:
-    """WNS (Edge/Windows) — двухшаговая диагностика + pywebpush с явным aud.
+    def disconnect(self, ws: WebSocket) -> None:
+        self._connections.pop(ws, None)
 
-    Шаг A: no-payload запрос — проверяем доходит ли событие push до SW.
-            SW получит event.data=null → в консоли SW: '[SW] event.data: (no payload)'
-    Шаг B: payload через pywebpush с явным aud — корректное RFC 8291 шифрование.
-    """
-    import requests
-    from pywebpush import webpush, WebPushException
-    from py_vapid import Vapid02
-
-    endpoint = sub_info["endpoint"]
-    # WNS требует audience = только origin (scheme://host, без пути)
-    audience = "/".join(endpoint.split("/")[:3])
-
-    claims = {
-        "sub": "mailto:" + vapid_contact,
-        "aud": audience,
-        "exp": int(time.time()) + 43200,  # 12 часов
-    }
-    vapid = Vapid02.from_string(private_key=private_key)
-    auth_value = vapid.sign(claims).get("Authorization", "")
-
-    print(f"[PUSH/WNS] audience : {audience}")
-    print(f"[PUSH/WNS] Auth hdr : {auth_value[:60]}…")  # vapid t=...
-
-    # --- Шаг A: no-payload — диагностика SW ---
-    # SW должен получить событие push с event.data = null.
-    # Если SW НЕ получает даже это — проблема в регистрации/доставке, не в шифровании.
-    resp_empty = requests.post(
-        endpoint,
-        data=b"",
-        headers={
-            "Authorization":  auth_value,
-            "TTL":            "86400",
-            "Content-Type":   "application/octet-stream",
-            "Content-Length": "0",
-        },
-        timeout=15,
-    )
-    print(f"[PUSH/WNS] шаг A (no-payload) → HTTP {resp_empty.status_code}"
-          + (f": {resp_empty.text[:100]}" if not resp_empty.ok else " OK"))
-
-    # --- Шаг B: payload через pywebpush с явным aud ---
-    # pywebpush обеспечивает корректное RFC 8291 / aes128gcm шифрование.
-    # Явный aud = только origin WNS (без пути) — иначе JWT не совпадает с endpoint.
-    try:
-        webpush(
-            subscription_info=sub_info,
-            data=payload_str,
-            vapid_private_key=private_key,
-            vapid_claims={
-                "sub": "mailto:" + vapid_contact,
-                "aud": audience,
-                "exp": int(time.time()) + 43200,
-            },
-            ttl=86400,
-            content_encoding="aes128gcm",
-        )
-        print("[PUSH/WNS] шаг B (payload) → OK")
-    except WebPushException as e:
-        resp_text = getattr(getattr(e, "response", None), "text", "")
-        status = getattr(getattr(e, "response", None), "status_code", "?")
-        print(f"[PUSH/WNS] шаг B (payload) → HTTP {status}: {e}"
-              + (f" | {resp_text[:200]}" if resp_text else ""))
-        # Поднимаем исключение только если оба шага провалились —
-        # пока шаг A успешен, считаем что SW хотя бы получил событие.
-        if not resp_empty.ok:
-            raise RuntimeError(f"WNS: {e}" + (f" | {resp_text[:200]}" if resp_text else ""))
+    async def broadcast_to_techs(self, message: dict) -> None:
+        data = json.dumps(message, ensure_ascii=False)
+        dead = []
+        for ws, role in list(self._connections.items()):
+            if role in ("tech", "admin"):
+                try:
+                    await ws.send_text(data)
+                except Exception:
+                    dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws)
 
 
-async def send_push_to_techs(db: AsyncSession, title: str, body: str) -> None:
-    if not settings.vapid_private_key:
-        print("[PUSH] VAPID_PRIVATE_KEY не задан — пропускаем")
-        return
-
-    result = await db.execute(
-        select(PushSubscription)
-        .join(User, User.id == PushSubscription.user_id)
-        .where(User.role.in_([UserRole.tech, UserRole.admin]))
-    )
-    subscriptions = result.scalars().all()
-    print(f"[PUSH] Найдено подписок: {len(subscriptions)}")
-
-    if not subscriptions:
-        print("[PUSH] Нет подписчиков — нажмите 'Включить уведомления' в боковой панели")
-        return
-
-    payload = json.dumps({"title": title, "body": body}, ensure_ascii=False)
-    loop = asyncio.get_running_loop()
-
-    for sub in subscriptions:
-        sub_info = json.loads(sub.subscription_json)
-        endpoint = sub_info.get("endpoint", "")
-        is_wns = "notify.windows.com" in endpoint or endpoint.startswith("https://wns")
-        print(f"[PUSH] → sub_id={sub.id} тип={'WNS/Edge' if is_wns else 'FCM'}")
-        print(f"[PUSH]   endpoint={endpoint}")
-
-        worker = _send_push_wns if is_wns else _send_push_fcm
-        try:
-            await loop.run_in_executor(
-                None, worker,
-                sub_info, payload, settings.vapid_private_key, settings.vapid_contact,
-            )
-            print(f"[PUSH] ✓ Отправлено sub_id={sub.id}")
-        except Exception as e:
-            print(f"[PUSH] ✗ sub_id={sub.id}: {e}")
+manager = ConnectionManager()
 
 
 # ---------- Auth helpers ----------
@@ -395,10 +286,6 @@ class ShiftSnapshotOut(BaseModel):
     created_at: datetime
     is_auto: bool
     model_config = {"from_attributes": True}
-
-
-class PushSubscriptionIn(BaseModel):
-    subscription_json: str
 
 
 class AuditLogOut(BaseModel):
@@ -777,7 +664,15 @@ async def create_incident(
                      {"lot": lot.name, "type": data.type, "priority": data.priority})
     await db.commit()
 
-    await send_push_to_techs(db, f"🔴 Новый сбой — {lot.name}", data.description or data.type)
+    await manager.broadcast_to_techs({
+        "type": "new_incident",
+        "data": {
+            "id": incident.id,
+            "lot_name": lot.name,
+            "description": data.description or data.type,
+            "priority": data.priority,
+        },
+    })
 
     result = await db.execute(_incident_query().where(Incident.id == incident.id))
     return result.scalar_one()
@@ -856,7 +751,15 @@ async def reopen_incident(
     await db.commit()
 
     if lot:
-        await send_push_to_techs(db, f"🔄 ПОВТОРНЫЙ сбой — {lot.name}", incident.description or incident.type)
+        await manager.broadcast_to_techs({
+            "type": "new_incident",
+            "data": {
+                "id": incident.id,
+                "lot_name": lot.name,
+                "description": incident.description or incident.type,
+                "priority": incident.priority,
+            },
+        })
 
     result = await db.execute(_incident_query().where(Incident.id == incident_id))
     return result.scalar_one()
@@ -1183,51 +1086,36 @@ async def get_shift_snapshots(
     return result.scalars().all()
 
 
-# ---------- Push subscriptions ----------
+# ---------- WebSocket ----------
 
-@app.get("/push/vapid-public-key")
-async def get_vapid_public_key():
-    return {"public_key": settings.vapid_public_key_raw}
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket, token: str = Query(default=None)):
+    if not token:
+        await ws.close(code=4001)
+        return
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        user_id = payload.get("sub")
+        if not user_id:
+            await ws.close(code=4001)
+            return
+    except JWTError:
+        await ws.close(code=4001)
+        return
 
+    async with AsyncSession(engine, expire_on_commit=False) as db:
+        result = await db.execute(select(User).where(User.id == int(user_id)))
+        user = result.scalar_one_or_none()
+        if not user or not user.is_active:
+            await ws.close(code=4001)
+            return
 
-@app.get("/push/status")
-async def push_subscription_status(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    result = await db.execute(
-        select(PushSubscription).where(PushSubscription.user_id == current_user.id)
-    )
-    return {"subscribed": result.scalar_one_or_none() is not None}
-
-
-@app.post("/push/test")
-async def test_push(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    if current_user.role != UserRole.admin:
-        raise HTTPException(403, "Only admins can send test pushes")
-    await send_push_to_techs(db, "🔔 Тест уведомлений", "система работает корректно")
-    return {"detail": "Push отправлен всем подписанным пользователям"}
-
-
-@app.post("/push/subscribe", status_code=201)
-async def subscribe_push(
-    data: PushSubscriptionIn,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    existing = await db.execute(
-        select(PushSubscription).where(PushSubscription.user_id == current_user.id)
-    )
-    sub = existing.scalar_one_or_none()
-    if sub:
-        sub.subscription_json = data.subscription_json
-    else:
-        db.add(PushSubscription(user_id=current_user.id, subscription_json=data.subscription_json))
-    await db.commit()
-    return {"detail": "Subscribed"}
+    await manager.connect(ws, user.role.value)
+    try:
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(ws)
 
 
 # ---------- Audit logs ----------

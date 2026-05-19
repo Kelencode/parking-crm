@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getIncidents } from '../api/incidents';
+import { subscribe as wsSubscribe } from '../api/websocket';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 
@@ -8,11 +9,19 @@ export default function Dashboard() {
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    getIncidents({ status: ['new', 'assigned', 'in_progress'], limit: 100 })
+  function loadIncidents() {
+    return getIncidents({ status: ['new', 'assigned', 'in_progress'], limit: 100 })
       .then(r => setIncidents(r.data))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      .catch(console.error);
+  }
+
+  useEffect(() => {
+    loadIncidents().finally(() => setLoading(false));
+
+    const unsub = wsSubscribe(msg => {
+      if (msg.type === 'new_incident') loadIncidents();
+    });
+    return unsub;
   }, []);
 
   const counts = { critical: 0, high: 0, medium: 0, low: 0 };

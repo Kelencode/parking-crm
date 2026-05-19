@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getPushServerStatus, subscribeToPush, sendTestPush } from '../api/push';
+import { connect as wsConnect, disconnect as wsDisconnect, subscribe as wsSubscribe } from '../api/websocket';
 
 const ADMIN_LINKS = [
   { to: '/dashboard',    label: 'Дашборд'        },
@@ -30,45 +30,41 @@ const TECH_LINKS = [
 
 const ROLE_LABELS = { admin: 'Администратор', dispatcher: 'Диспетчер', tech: 'Техник' };
 
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
 export default function Layout() {
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
-  const [pushStatus, setPushStatus] = useState('checking');
-  const [pushError, setPushError]   = useState('');
-  const [testBusy, setTestBusy]     = useState(false);
-  const [menuOpen, setMenuOpen]     = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  const isSafariOnly = /Safari/.test(navigator.userAgent) && !/Chrome|CriOS|YaBrowser/.test(navigator.userAgent);
-
+  // WebSocket + desktop notifications
   useEffect(() => {
-    async function checkPushStatus() {
-      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        setPushStatus('unsupported');
-        return;
-      }
-      try {
-        const reg = await navigator.serviceWorker.ready;
-        const browserSub = await reg.pushManager.getSubscription();
+    if (!user) return;
 
-        if (!browserSub) {
-          localStorage.removeItem('push_confirmed_v2');
-          setPushStatus('unsubscribed');
-          return;
-        }
+    wsConnect();
 
-        const serverHasSub = await getPushServerStatus();
-        if (serverHasSub === false) {
-          localStorage.removeItem('push_confirmed_v2');
-          setPushStatus('unsubscribed');
-        } else {
-          setPushStatus('subscribed');
-        }
-      } catch {
-        setPushStatus('unsupported');
+    // Request notification permission silently for tech/admin on desktop
+    if (!isMobile && user.role !== 'dispatcher' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
       }
     }
-    checkPushStatus();
-  }, []);
+
+    const unsub = wsSubscribe((msg) => {
+      if (msg.type === 'new_incident' && !isMobile && Notification.permission === 'granted') {
+        const { lot_name, description } = msg.data;
+        new Notification(`🔴 Новый сбой — ${lot_name}`, {
+          body: description,
+          icon: '/icon-192.png',
+        });
+      }
+    });
+
+    return () => {
+      unsub();
+      wsDisconnect();
+    };
+  }, [user?.id]);
 
   // Закрывать drawer при нажатии Escape
   useEffect(() => {
@@ -90,32 +86,8 @@ export default function Layout() {
 
   function handleLogout() {
     localStorage.removeItem('token');
-    localStorage.removeItem('push_subscribed');
-    localStorage.removeItem('push_confirmed_v2');
     setUser(null);
     navigate('/login', { replace: true });
-  }
-
-  async function handleEnablePush() {
-    setPushError('');
-    const result = await subscribeToPush();
-    if (result?.error) {
-      setPushError(result.error);
-    } else if (result?.success) {
-      setPushStatus('subscribed');
-    }
-  }
-
-  async function handleTestPush() {
-    setTestBusy(true);
-    try {
-      await sendTestPush();
-      alert('Тестовый push отправлен — проверьте уведомления');
-    } catch (e) {
-      alert(e.response?.data?.detail ?? 'Ошибка');
-    } finally {
-      setTestBusy(false);
-    }
   }
 
   function closeMenu() { setMenuOpen(false); }
@@ -160,73 +132,6 @@ export default function Layout() {
             {user?.name || user?.email}<br/>
             <span className="text-sm">{ROLE_LABELS[user?.role] ?? user?.role}</span>
           </div>
-
-          {pushStatus === 'subscribed' && (
-            <div style={{ fontSize: 11, color: '#22c55e', padding: '4px 0 6px', textAlign: 'center' }}>
-              Уведомления включены ✓
-            </div>
-          )}
-
-          {pushStatus === 'unsupported' && (
-            <div style={{ fontSize: 11, color: 'var(--c-muted)', padding: '4px 0 6px', textAlign: 'center' }}>
-              {isSafariOnly
-                ? 'Для уведомлений добавьте приложение на экран «Домой» через Safari'
-                : 'Push-уведомления не поддерживаются в этом браузере'}
-            </div>
-          )}
-
-          {pushStatus === 'unsubscribed' && (
-            <>
-              {pushError === 'blocked' ? (
-                <div style={{ fontSize: 11, color: '#f87171', marginBottom: 6, lineHeight: 1.5 }}>
-                  Уведомления заблокированы.{' '}
-                  {isSafariOnly ? (
-                    <>Добавьте приложение на экран «Домой» через Safari, затем разрешите уведомления.</>
-                  ) : (
-                    <>Разрешите их в настройках браузера:<br/>
-                    🔒 Замок в адресной строке → Уведомления → <b>Разрешить</b></>
-                  )}
-                </div>
-              ) : (
-                <>
-                  <button className="btn btn-secondary" style={{ width: '100%', marginBottom: 4, fontSize: 12 }}
-                    onClick={handleEnablePush}>
-                    Включить уведомления
-                  </button>
-                  {pushError === 'dismissed' && (
-                    <div style={{ fontSize: 11, color: '#f97316', marginBottom: 4, lineHeight: 1.4 }}>
-                      Запрос был отклонён. Нажмите ещё раз и разрешите уведомления в диалоге браузера.
-                    </div>
-                  )}
-                  {pushError && pushError !== 'dismissed' && (
-                    <div style={{ fontSize: 11, color: '#f87171', marginBottom: 4, lineHeight: 1.4 }}>
-                      {pushError}
-                    </div>
-                  )}
-                  {isSafariOnly && !pushError && (
-                    <div style={{ fontSize: 11, color: 'var(--c-muted)', lineHeight: 1.4, marginBottom: 4 }}>
-                      На iPhone: откройте в Safari и добавьте на экран «Домой»
-                    </div>
-                  )}
-                </>
-              )}
-            </>
-          )}
-
-          {user?.role === 'admin' && pushStatus === 'subscribed' && (
-            <>
-              <button className="btn btn-secondary" style={{ width: '100%', marginBottom: 4, fontSize: 12 }}
-                onClick={handleTestPush} disabled={testBusy}>
-                {testBusy ? 'Отправка...' : '🔔 Тест push'}
-              </button>
-              <div style={{ fontSize: 10, color: 'var(--c-muted)', lineHeight: 1.4, marginBottom: 6, padding: '0 2px' }}>
-                Если уведомление не пришло:<br/>
-                • Замок в адресной строке → Уведомления → Разрешить<br/>
-                • Яндекс: Настройки → Сайты → Уведомления<br/>
-                • Windows: Параметры → Система → Уведомления → включи Яндекс Браузер
-              </div>
-            </>
-          )}
 
           <button className="btn btn-secondary" style={{ width: '100%' }} onClick={handleLogout}>
             Выйти

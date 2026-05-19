@@ -78,14 +78,13 @@ class User(Base):
     email:                Mapped[str]      = mapped_column(String(256), unique=True, index=True, nullable=False)
     password_hash:        Mapped[str]      = mapped_column(String(256), nullable=False)
     role:                 Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False, default=UserRole.tech)
-    is_active:            Mapped[bool]     = mapped_column(Boolean, nullable=False, default=True, server_default="1")
-    must_change_password: Mapped[bool]     = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    is_active:            Mapped[bool]     = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    must_change_password: Mapped[bool]     = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     created_at:           Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
 
     incidents_created:  Mapped[list["Incident"]] = relationship("Incident", foreign_keys="Incident.created_by", back_populates="creator")
     incidents_assigned: Mapped[list["Incident"]] = relationship("Incident", foreign_keys="Incident.assigned_to", back_populates="assignee")
     shift_notes:        Mapped[list["ShiftNote"]] = relationship("ShiftNote", back_populates="creator")
-    push_subscriptions: Mapped[list["PushSubscription"]] = relationship("PushSubscription", back_populates="user")
 
 
 class ParkingLot(Base):
@@ -100,7 +99,7 @@ class ParkingLot(Base):
     cash_registers_count: Mapped[int]            = mapped_column(Integer, default=1)
     has_entry_group:     Mapped[bool]            = mapped_column(Boolean, default=False)
     has_exit_group:      Mapped[bool]            = mapped_column(Boolean, default=False)
-    is_active:           Mapped[bool]            = mapped_column(Boolean, default=True, server_default="1")
+    is_active:           Mapped[bool]            = mapped_column(Boolean, default=True, server_default="true")
     notes:               Mapped[Optional[str]]   = mapped_column(Text, nullable=True)
 
     incidents: Mapped[list["Incident"]] = relationship("Incident", back_populates="parking_lot")
@@ -138,16 +137,6 @@ class ShiftNote(Base):
     is_active:  Mapped[bool]            = mapped_column(Boolean, default=True)
 
     creator: Mapped["User"] = relationship("User", back_populates="shift_notes")
-
-
-class PushSubscription(Base):
-    __tablename__ = "push_subscriptions"
-
-    id:                Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id:           Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    subscription_json: Mapped[str] = mapped_column(Text, nullable=False)
-
-    user: Mapped["User"] = relationship("User", back_populates="push_subscriptions")
 
 
 class AuditLog(Base):
