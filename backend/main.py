@@ -35,6 +35,23 @@ from models import (
 from utils import calculate_priority, log_action
 
 
+# ---------- Datetime helpers ----------
+
+def parse_date_from(s: str) -> datetime:
+    return datetime.strptime(s, "%Y-%m-%d")
+
+def parse_date_to(s: str) -> datetime:
+    return datetime.strptime(s, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+
+def strip_tz(dt: Optional[datetime]) -> Optional[datetime]:
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        from datetime import timezone as _tz
+        return dt.astimezone(_tz.utc).replace(tzinfo=None)
+    return dt
+
+
 def _migrate(conn) -> None:
     """Добавляет новые колонки в существующие таблицы (без потери данных)."""
     migrations = [
@@ -656,20 +673,20 @@ async def list_incidents(
         query = query.where(Incident.parking_lot_id == lot_id)
     if date:
         # incidents that were active during this date
-        query = query.where(Incident.created_at <= date + " 23:59:59")
+        query = query.where(Incident.created_at <= parse_date_to(date))
         query = query.where(
-            (Incident.closed_at == None) | (Incident.closed_at >= date)
+            (Incident.closed_at == None) | (Incident.closed_at >= parse_date_from(date))
         )
     if created_date:
-        query = query.where(Incident.created_at >= created_date)
-        query = query.where(Incident.created_at <= created_date + " 23:59:59")
+        query = query.where(Incident.created_at >= parse_date_from(created_date))
+        query = query.where(Incident.created_at <= parse_date_to(created_date))
     if closed_date:
-        query = query.where(Incident.closed_at >= closed_date)
-        query = query.where(Incident.closed_at <= closed_date + " 23:59:59")
+        query = query.where(Incident.closed_at >= parse_date_from(closed_date))
+        query = query.where(Incident.closed_at <= parse_date_to(closed_date))
     if date_from:
-        query = query.where(Incident.created_at >= date_from)
+        query = query.where(Incident.created_at >= parse_date_from(date_from))
     if date_to:
-        query = query.where(Incident.created_at <= date_to + " 23:59:59")
+        query = query.where(Incident.created_at <= parse_date_to(date_to))
     query = query.order_by(Incident.created_at.desc())
     if limit:
         query = query.limit(limit)
@@ -1025,8 +1042,8 @@ async def report_journal(
     query = (
         select(JournalEntry)
         .options(selectinload(JournalEntry.parking_lot), selectinload(JournalEntry.creator))
-        .where(JournalEntry.created_at >= date_from)
-        .where(JournalEntry.created_at <= date_to + " 23:59:59")
+        .where(JournalEntry.created_at >= parse_date_from(date_from))
+        .where(JournalEntry.created_at <= parse_date_to(date_to))
     )
     if lot_id is not None:
         query = query.where(JournalEntry.parking_lot_id == lot_id)
@@ -1105,12 +1122,10 @@ async def list_shift_notes(
     _: User = Depends(get_current_user),
 ):
     if date:
-        from datetime import timedelta
-        next_day = (datetime.strptime(date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
         result = await db.execute(
             select(ShiftNote)
-            .where(ShiftNote.created_at >= date)
-            .where(ShiftNote.created_at < next_day)
+            .where(ShiftNote.created_at >= parse_date_from(date))
+            .where(ShiftNote.created_at <= parse_date_to(date))
             .order_by(ShiftNote.created_at.desc())
         )
     else:
@@ -1130,7 +1145,9 @@ async def create_shift_note(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    note = ShiftNote(**data.model_dump(), created_by=current_user.id)
+    dump = data.model_dump()
+    dump["expires_at"] = strip_tz(dump.get("expires_at"))
+    note = ShiftNote(**dump, created_by=current_user.id)
     db.add(note)
     await db.flush()
     await log_action(db, current_user, AuditAction.shift_note_created, "shift_note", note.id)
@@ -1266,8 +1283,7 @@ async def create_journal_entry(
         created_by=current_user.id,
     )
     if data.created_at:
-        from datetime import timezone as _tz
-        entry.created_at = data.created_at.astimezone(_tz.utc).replace(tzinfo=None)
+        entry.created_at = strip_tz(data.created_at)
 
     db.add(entry)
     await db.flush()
@@ -1363,9 +1379,9 @@ async def list_audit_logs(
     if action:
         query = query.where(AuditLog.action == action)
     if date_from:
-        query = query.where(AuditLog.created_at >= date_from)
+        query = query.where(AuditLog.created_at >= parse_date_from(date_from))
     if date_to:
-        query = query.where(AuditLog.created_at <= date_to + " 23:59:59")
+        query = query.where(AuditLog.created_at <= parse_date_to(date_to))
     query = query.order_by(AuditLog.created_at.desc()).limit(limit).offset(offset)
     result = await db.execute(query)
     return result.scalars().all()
