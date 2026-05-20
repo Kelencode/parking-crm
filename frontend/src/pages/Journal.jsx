@@ -646,8 +646,8 @@ export default function Journal() {
   // ── Row styles ──────────────────────────────────────────────────────────────
 
   const OP_BADGE = {
-    'Въезд': { bg: '#1e3a5f', color: '#93c5fd', label: '↓ Въезд' },
-    'Выезд': { bg: '#14532d', color: '#86efac', label: '↑ Выезд' },
+    'Въезд': { label: '↓ Въезд' },
+    'Выезд': { label: '↑ Выезд' },
   };
 
   // ── Desktop table ────────────────────────────────────────────────────────────
@@ -711,7 +711,7 @@ export default function Journal() {
                         <td>
                           {badge && (
                             <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 7px',
-                              borderRadius: 4, background: badge.bg, color: badge.color,
+                              borderRadius: 4, background: 'var(--c-border)', color: 'var(--c-text)',
                               whiteSpace: 'nowrap' }}>
                               {badge.label}
                             </span>
@@ -821,7 +821,7 @@ export default function Journal() {
                       <td>
                         {badge && (
                           <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px',
-                            borderRadius: 4, background: badge.bg, color: badge.color,
+                            borderRadius: 4, background: 'var(--c-border)', color: 'var(--c-text)',
                             whiteSpace: 'nowrap' }}>
                             {badge.label}
                           </span>
