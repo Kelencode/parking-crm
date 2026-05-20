@@ -43,10 +43,9 @@ function localDateStr(d) {
 }
 function getMoscowTime() {
   const now = new Date();
-  const moscowOffset = 3 * 60;
-  const localOffset = now.getTimezoneOffset();
-  const mt = new Date(now.getTime() + (moscowOffset + localOffset) * 60000);
-  return `${String(mt.getHours()).padStart(2,'0')}:${String(mt.getMinutes()).padStart(2,'0')}`;
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const moscow = new Date(utc + 3 * 60 * 60 * 1000);
+  return moscow.toTimeString().slice(0, 5);
 }
 function toMoscowISOString(d) {
   const moscowOffset = 3 * 60;
@@ -559,16 +558,18 @@ export default function Journal() {
 
   function handleDraftBlur() {
     setTimeout(() => {
-      const activeEl = document.activeElement;
-      const draftRow = document.getElementById('draft-row');
-      if (draftRow && draftRow.contains(activeEl)) return;
-      // Focus left the row — only reset if incomplete, NEVER save
+      const active = document.activeElement;
+      const row = document.getElementById('draft-row');
+      const portal = document.querySelector('.parking-dropdown');
+      if (row?.contains(active)) return;
+      if (portal?.contains(active)) return;
       const d = draftRef.current;
-      if (!(d.parking_lot_id && d.operation && d.grz?.trim() && d.reason)) {
+      const valid = d.parking_lot_id && d.operation && d.grz?.trim() && d.reason;
+      if (!valid) {
         setDraft(emptyDraft());
         setDraftError(false);
       }
-    }, 150);
+    }, 300);
   }
 
   // ── Edit existing row handlers ──────────────────────────────────────────────
@@ -617,7 +618,7 @@ export default function Journal() {
       time: getMoscowTime(),
       parking_lot_id: String(entry.parking_lot_id),
       operation: entry.operation,
-      grz: '',
+      grz: entry.grz,
       reason: entry.reason,
       note: entry.note || '',
       ticket_number: entry.ticket_number || '',
@@ -660,7 +661,6 @@ export default function Journal() {
 
   // ── Row styles ──────────────────────────────────────────────────────────────
 
-  const ROW_BG = { 'Въезд': 'rgba(59,130,246,.1)', 'Выезд': 'rgba(34,197,94,.1)' };
   const OP_BADGE = {
     'Въезд': { bg: '#1e3a5f', color: '#93c5fd', label: '↓ Въезд' },
     'Выезд': { bg: '#14532d', color: '#86efac', label: '↑ Выезд' },
@@ -719,7 +719,7 @@ export default function Journal() {
                     const tStr = moscowTimeFromISO(entry.created_at);
                     return (
                       <tr key={entry.id}
-                        style={{ background: ROW_BG[entry.operation] ?? '', cursor: canEdit ? 'pointer' : 'default' }}
+                        style={{ cursor: canEdit ? 'pointer' : 'default' }}
                         onClick={() => canEdit && startEdit(entry)}
                         title={canEdit ? 'Нажмите для редактирования' : undefined}>
                         <td className="text-sm" style={{ whiteSpace: 'nowrap' }}>{tStr}</td>
@@ -823,7 +823,7 @@ export default function Journal() {
                   const tStr = moscowTimeFromISO(entry.created_at);
                   return (
                     <tr key={entry.id}
-                      style={{ background: ROW_BG[entry.operation] ?? '', cursor: canEdit ? 'pointer' : 'default' }}
+                      style={{ cursor: canEdit ? 'pointer' : 'default' }}
                       onClick={() => canEdit && (setPrefill({
                         parking_lot_id: entry.parking_lot_id,
                         operation: entry.operation,
@@ -877,7 +877,7 @@ export default function Journal() {
       {/* Header */}
       <div className="page-header">
         <h1 className="page-title">
-          Журнал открытий
+          Электронный журнал
           <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--c-muted)', marginLeft: 10 }}>
             {displayed.length} {displayed.length === 1 ? 'запись' :
               displayed.length < 5 ? 'записи' : 'записей'}
@@ -925,14 +925,6 @@ export default function Journal() {
       {/* Legend (desktop only) */}
       {!isMobile && (
         <div style={{ marginTop: 10, display: 'flex', gap: 16, fontSize: 12, color: 'var(--c-muted)', flexWrap: 'wrap' }}>
-          <span>
-            <span style={{ display:'inline-block', width:10, height:10, borderRadius:2, marginRight:4,
-              background:'rgba(59,130,246,.3)' }}/>Въезд
-          </span>
-          <span>
-            <span style={{ display:'inline-block', width:10, height:10, borderRadius:2, marginRight:4,
-              background:'rgba(34,197,94,.3)' }}/>Выезд
-          </span>
           <span>
             <span style={{ display:'inline-block', width:10, height:10, borderRadius:2, marginRight:4,
               background:'rgba(234,179,8,.2)' }}/>Редактирование / новая строка
