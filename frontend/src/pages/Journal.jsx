@@ -9,13 +9,31 @@ import { getParkingLots } from '../api/parkingLots';
 import { subscribe as wsSubscribe } from '../api/websocket';
 
 const REASONS = [
-  'Без оплаты(сбой)', 'Без оплаты (согласовано)', 'Ручное открытие(сбой)',
-  'Инвалид (перезапись)', 'Инвалид (ручное)', 'Инвалид(не фРИ\\оплата)',
-  'Сотрудник ГЦУП(перезапись)', 'Сотрудник ГЦУП(ручное)', 'Сотрудник ГЦУП(контролер)',
-  'Спец. Техника', 'Абонемент', 'Без карты', 'Скорая помощь', 'Оплата',
-  'Электромобиль', 'Утеря парковочной карты', 'Социальное такси',
-  'Запись суточного тарифа', 'Курсус', 'Полиция', 'Замятие', 'Сервис',
-  'Обслуживание АПС', 'Прочее', 'КлеверПарк',
+  { value: 'Без оплаты(сбой)',            label: 'Без оплаты(сбой)' },
+  { value: 'Без оплаты (согласовано)',    label: 'Без оплаты (согласовано)' },
+  { value: 'Ручное открытие(сбой)',       label: 'Ручное открытие(сбой)' },
+  { value: 'Инвалид (перезапись)',        label: 'Инвалид (перезапись)' },
+  { value: 'Инвалид (ручное)',            label: 'Инвалид (ручное)' },
+  { value: 'Инвалид(не фРИ\\оплата)',    label: 'Инвалид(не фРИ\\оплата)' },
+  { value: 'Сотрудник ГЦУП(перезапись)', label: 'Сотрудник ГЦУП(перезапись)' },
+  { value: 'Сотрудник ГЦУП(ручное)',     label: 'Сотрудник ГЦУП(ручное)' },
+  { value: 'Сотрудник ГЦУП(контролер)',  label: 'Сотрудник ГЦУП(контролер)' },
+  { value: 'Спец. Техника',              label: 'Спец. Техника' },
+  { value: 'Абонемент',                  label: 'Абонемент' },
+  { value: 'Без карты',                  label: 'Без карты' },
+  { value: 'Скорая помощь',              label: 'Скорая помощь' },
+  { value: 'Оплата',                     label: 'Оплата' },
+  { value: 'Электромобиль',              label: 'Электромобиль' },
+  { value: 'Утеря парковочной карты',    label: 'Утеря парковочной карты' },
+  { value: 'Социальное такси',           label: 'Социальное такси' },
+  { value: 'Запись суточного тарифа',    label: 'Запись суточного тарифа' },
+  { value: 'Курсус',                     label: 'Курсус' },
+  { value: 'Полиция',                    label: 'Полиция' },
+  { value: 'Замятие',                    label: 'Замятие' },
+  { value: 'Сервис',                     label: 'Сервис' },
+  { value: 'Обслуживание АПС',           label: 'Обслуживание АПС' },
+  { value: 'Прочее',                     label: 'Прочее' },
+  { value: 'КлеверПарк',                label: 'КлеверПарк' },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -45,13 +63,13 @@ function moscowTimeFromISO(isoStr) {
   return `${String(mt.getHours()).padStart(2,'0')}:${String(mt.getMinutes()).padStart(2,'0')}`;
 }
 function emptyDraft() {
-  return { time: getMoscowTime(), parking_lot_id: '', operation: 'выезд', grz: '', reason: REASONS[0], note: '', ticket_number: '' };
+  return { time: getMoscowTime(), parking_lot_id: '', operation: 'выезд', grz: '', reason: REASONS[0].value, note: '', ticket_number: '' };
 }
 function entryToVals(e) {
   return {
     time: moscowTimeFromISO(e.created_at),
     parking_lot_id: String(e.parking_lot_id),
-    operation: e.operation,
+    operation: e.operation === 'entry' ? 'въезд' : e.operation === 'exit' ? 'выезд' : e.operation,
     grz: e.grz,
     reason: e.reason,
     note: e.note || '',
@@ -251,7 +269,7 @@ function EditableRow({ vals, onChange, onSave, onCancel, onDelete, onBlurRow,
       <td style={{ minWidth: 168 }}>
         <select className="cell-sel" value={vals.reason}
           onChange={e => onChange('reason', e.target.value)} onKeyDown={kd}>
-          {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+          {REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
         </select>
       </td>
       {/* Примечание */}
@@ -298,7 +316,7 @@ function AddEntryModal({ lots, prefill, onClose, onSaved }) {
     parking_lot_id: prefill?.parking_lot_id ?? '',
     operation: prefill?.operation ?? 'въезд',
     grz: '',
-    reason: prefill?.reason ?? REASONS[0],
+    reason: prefill?.reason ?? REASONS[0].value,
     note: prefill?.note ?? '',
     ticket_number: prefill?.ticket_number ?? '',
     created_at: toMoscowISOString(new Date()),
@@ -377,7 +395,7 @@ function AddEntryModal({ lots, prefill, onClose, onSaved }) {
             <label className="form-label">Основание *</label>
             <select className="form-ctrl" value={form.reason}
               onChange={e => set('reason', e.target.value)} required>
-              {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+              {REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </div>
           <div className="form-group">
