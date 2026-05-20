@@ -355,9 +355,9 @@ class AuditLogOut(BaseModel):
 
 class JournalEntryCreate(BaseModel):
     parking_lot_id: int
-    operation: JournalOperation
+    operation: str
     grz: str = Field(max_length=20)
-    reason: JournalReason
+    reason: str
     note: Optional[str] = Field(default=None, max_length=300)
     ticket_number: Optional[str] = Field(default=None, max_length=20)
     created_at: Optional[datetime] = None
@@ -365,9 +365,9 @@ class JournalEntryCreate(BaseModel):
 
 class JournalEntryUpdate(BaseModel):
     parking_lot_id: Optional[int] = None
-    operation: Optional[JournalOperation] = None
+    operation: Optional[str] = None
     grz: Optional[str] = Field(default=None, max_length=20)
-    reason: Optional[JournalReason] = None
+    reason: Optional[str] = None
     note: Optional[str] = Field(default=None, max_length=300)
     ticket_number: Optional[str] = Field(default=None, max_length=20)
     created_at: Optional[datetime] = None
@@ -378,14 +378,14 @@ class JournalEntryOut(BaseModel):
     created_at: datetime
     parking_lot_id: int
     parking_lot: Optional[ParkingLotOut] = None
-    operation: JournalOperation
+    operation: str
     grz: str
-    reason: JournalReason
+    reason: str
     note: Optional[str] = None
     ticket_number: Optional[str] = None
     created_by: int
     creator: Optional[UserOut] = None
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "use_enum_values": True}
 
 
 # ---------- Reusable query ----------
