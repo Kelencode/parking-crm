@@ -65,6 +65,28 @@ function useWindowWidth() {
   return w;
 }
 
+// ── OpToggle ──────────────────────────────────────────────────────────────────
+
+function OpToggle({ value, onChange }) {
+  return (
+    <div style={{ display: 'flex', gap: 3 }}>
+      {['въезд', 'выезд'].map(op => (
+        <button key={op} type="button"
+          style={{
+            padding: '2px 8px', fontSize: 11, borderRadius: 4, cursor: 'pointer',
+            border: '1px solid var(--c-border)',
+            background: value === op ? (op === 'въезд' ? '#1d4ed8' : '#15803d') : 'transparent',
+            color: value === op ? '#fff' : 'var(--c-muted)',
+            fontWeight: value === op ? 600 : 400,
+          }}
+          onClick={() => onChange(op)}>
+          {op === 'въезд' ? '↓' : '↑'} {op.charAt(0).toUpperCase() + op.slice(1)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── EditableRow — shared between draft and edit-existing ─────────────────────
 
 function EditableRow({ vals, onChange, onSave, onCancel, onDelete, onBlurRow,
@@ -72,14 +94,18 @@ function EditableRow({ vals, onChange, onSave, onCancel, onDelete, onBlurRow,
   const activeLots = lots.filter(l => l.is_active !== false);
   const rowClass = hasError ? 'row-error' : 'row-editing';
 
-  const [parkingText, setParkingText] = useState(
-    () => activeLots.find(l => String(l.id) === String(vals.parking_lot_id))?.name ?? ''
-  );
+  const [parkingText, setParkingText] = useState('');
+
+  // Sync display text when parking_lot_id or lots change (e.g. copyToDraft, initial load)
+  useEffect(() => {
+    const name = lots.find(l => String(l.id) === String(vals.parking_lot_id))?.name ?? '';
+    setParkingText(name);
+  }, [vals.parking_lot_id, lots]);
 
   function handleParkingChange(e) {
     const name = e.target.value;
     setParkingText(name);
-    const found = activeLots.find(l => l.name === name);
+    const found = activeLots.find(l => l.name.trim() === name.trim());
     onChange('parking_lot_id', found ? String(found.id) : '');
   }
 
@@ -112,16 +138,9 @@ function EditableRow({ vals, onChange, onSave, onCancel, onDelete, onBlurRow,
           placeholder="Введите или выберите..."
         />
       </td>
-      {/* Операция — combobox */}
-      <td style={{ minWidth: 120 }}>
-        <input
-          list="ops-datalist"
-          className="cell-inp"
-          value={vals.operation}
-          onChange={e => onChange('operation', e.target.value.toLowerCase())}
-          onKeyDown={kd}
-          placeholder="въезд / выезд"
-        />
+      {/* Операция — toggle buttons */}
+      <td style={{ minWidth: 148 }}>
+        <OpToggle value={vals.operation} onChange={v => onChange('operation', v)} />
       </td>
       {/* ГРЗ */}
       <td style={{ minWidth: 106 }}>
@@ -130,16 +149,12 @@ function EditableRow({ vals, onChange, onSave, onCancel, onDelete, onBlurRow,
           style={{ fontFamily: 'monospace', fontWeight: 600, textTransform: 'uppercase' }}
           onChange={e => onChange('grz', e.target.value.toUpperCase())} onKeyDown={kd} />
       </td>
-      {/* Основание — combobox */}
+      {/* Основание — select */}
       <td style={{ minWidth: 168 }}>
-        <input
-          list="reasons-datalist"
-          className="cell-inp"
-          value={vals.reason}
-          onChange={e => onChange('reason', e.target.value)}
-          onKeyDown={kd}
-          placeholder="Введите или выберите..."
-        />
+        <select className="cell-sel" value={vals.reason}
+          onChange={e => onChange('reason', e.target.value)} onKeyDown={kd}>
+          {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+        </select>
       </td>
       {/* Примечание */}
       <td style={{ minWidth: 120 }}>
@@ -180,6 +195,7 @@ function EditableRow({ vals, onChange, onSave, onCancel, onDelete, onBlurRow,
 // ── Mobile modal ──────────────────────────────────────────────────────────────
 
 function AddEntryModal({ lots, prefill, onClose, onSaved }) {
+  const activeLots = lots.filter(l => l.is_active !== false);
   const [form, setForm] = useState({
     parking_lot_id: prefill?.parking_lot_id ?? '',
     operation: prefill?.operation ?? 'въезд',
@@ -189,10 +205,12 @@ function AddEntryModal({ lots, prefill, onClose, onSaved }) {
     ticket_number: prefill?.ticket_number ?? '',
     created_at: toMoscowISOString(new Date()),
   });
+  const [parkingText, setParkingText] = useState(
+    () => activeLots.find(l => String(l.id) === String(prefill?.parking_lot_id ?? ''))?.name ?? ''
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const activeLots = lots.filter(l => l.is_active !== false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -226,9 +244,11 @@ function AddEntryModal({ lots, prefill, onClose, onSaved }) {
           <div className="form-group">
             <label className="form-label">Стоянка *</label>
             <input className="form-ctrl" list="modal-parking-datalist"
-              value={activeLots.find(l => String(l.id) === String(form.parking_lot_id))?.name ?? ''}
+              value={parkingText}
               onChange={e => {
-                const found = activeLots.find(l => l.name === e.target.value);
+                const name = e.target.value;
+                setParkingText(name);
+                const found = activeLots.find(l => l.name.trim() === name.trim());
                 set('parking_lot_id', found ? String(found.id) : '');
               }}
               placeholder="Введите или выберите..." required />
@@ -238,14 +258,15 @@ function AddEntryModal({ lots, prefill, onClose, onSaved }) {
           </div>
           <div className="form-group">
             <label className="form-label">Операция *</label>
-            <input className="form-ctrl" list="modal-ops-datalist"
-              value={form.operation}
-              onChange={e => set('operation', e.target.value.toLowerCase())}
-              placeholder="въезд / выезд" required />
-            <datalist id="modal-ops-datalist">
-              <option value="въезд" />
-              <option value="выезд" />
-            </datalist>
+            <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
+              {['въезд', 'выезд'].map(op => (
+                <label key={op} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 14 }}>
+                  <input type="radio" name="operation" value={op}
+                    checked={form.operation === op} onChange={() => set('operation', op)} />
+                  {op.charAt(0).toUpperCase() + op.slice(1)}
+                </label>
+              ))}
+            </div>
           </div>
           <div className="form-group">
             <label className="form-label">ГРЗ *</label>
@@ -256,13 +277,10 @@ function AddEntryModal({ lots, prefill, onClose, onSaved }) {
           </div>
           <div className="form-group">
             <label className="form-label">Основание *</label>
-            <input className="form-ctrl" list="modal-reasons-datalist"
-              value={form.reason}
-              onChange={e => set('reason', e.target.value)}
-              placeholder="Введите или выберите..." required />
-            <datalist id="modal-reasons-datalist">
-              {REASONS.map(r => <option key={r} value={r} />)}
-            </datalist>
+            <select className="form-ctrl" value={form.reason}
+              onChange={e => set('reason', e.target.value)} required>
+              {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
           </div>
           <div className="form-group">
             <label className="form-label">Время *</label>
@@ -388,6 +406,7 @@ export default function Journal() {
   function updDraft(k, v) { setDraft(f => ({ ...f, [k]: v })); }
 
   async function saveDraft() {
+    console.log('[saveDraft] draft:', { parking_lot_id: draft.parking_lot_id, operation: draft.operation, grz: draft.grz, reason: draft.reason });
     if (!isValid(draft)) { setDraftError(true); return; }
     setDraftError(false);
     setDraftSaving(true);
@@ -636,19 +655,12 @@ export default function Journal() {
           </table>
         </div>
 
-        {/* Datalists for combobox fields */}
+        {/* Datalists */}
         <datalist id="grz-list">
           {grzList.map(g => <option key={g} value={g} />)}
         </datalist>
         <datalist id="parking-lots-datalist">
           {activeLots.map(l => <option key={l.id} value={l.name} />)}
-        </datalist>
-        <datalist id="ops-datalist">
-          <option value="въезд" />
-          <option value="выезд" />
-        </datalist>
-        <datalist id="reasons-datalist">
-          {REASONS.map(r => <option key={r} value={r} />)}
         </datalist>
       </div>
     );
