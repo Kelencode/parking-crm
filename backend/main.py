@@ -19,7 +19,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import bcrypt as _bcrypt
 from jose import JWTError, jwt
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,44 @@ from models import (
     ParkingLot, ShiftNote, ShiftSnapshot, User, UserRole,
 )
 from utils import calculate_priority, log_action
+
+
+# ---------- Journal operation / reason maps ----------
+
+_OP_MAP = {
+    'въезд': 'entry', 'выезд': 'exit',
+    'entry': 'entry', 'exit': 'exit',
+}
+
+_REASON_MAP = {
+    'Без оплаты(сбой)':         'no_pay_fail',
+    'Без оплаты (согласовано)': 'no_pay_approved',
+    'Ручное открытие(сбой)':    'manual_fail',
+    'Инвалид (перезапись)':     'disabled_rewrite',
+    'Инвалид (ручное)':         'disabled_manual',
+    'Инвалид(не фРИ\\оплата)': 'disabled_no_fri',
+    'Сотрудник ГЦУП(перезапись)': 'staff_rewrite',
+    'Сотрудник ГЦУП(ручное)':   'staff_manual',
+    'Сотрудник ГЦУП(контролер)': 'staff_controller',
+    'Спец. Техника':            'spec_tech',
+    'Абонемент':                'abonement',
+    'Без карты':                'no_card',
+    'Скорая помощь':            'ambulance',
+    'Оплата':                   'payment',
+    'Электромобиль':            'electric_car',
+    'Утеря парковочной карты':  'lost_card',
+    'Социальное такси':         'social_taxi',
+    'Запись суточного тарифа':  'daily_tariff',
+    'Курсус':                   'kursus',
+    'Полиция':                  'police',
+    'Замятие':                  'jam',
+    'Сервис':                   'service',
+    'Обслуживание АПС':         'aps_service',
+    'Прочее':                   'other',
+    'КлеверПарк':               'klever_park',
+}
+_REASON_REVERSE = {v: k for k, v in _REASON_MAP.items()}
+_OP_DISPLAY = {'entry': 'Въезд', 'exit': 'Выезд'}
 
 
 # ---------- Datetime helpers ----------
@@ -386,6 +424,19 @@ class JournalEntryOut(BaseModel):
     created_by: int
     creator: Optional[UserOut] = None
     model_config = {"from_attributes": True, "use_enum_values": True}
+
+    @field_validator('operation', mode='before')
+    @classmethod
+    def _normalize_op(cls, v):
+        raw = v.value if hasattr(v, 'value') else str(v)
+        return _OP_DISPLAY.get(raw, _OP_DISPLAY.get(raw.lower(), raw))
+
+    @field_validator('reason', mode='before')
+    @classmethod
+    def _normalize_reason(cls, v):
+        raw = v.value if hasattr(v, 'value') else str(v)
+        # Already Russian value from enum — reverse-map English key just in case
+        return _REASON_REVERSE.get(raw, raw)
 
 
 # ---------- Reusable query ----------
@@ -1308,6 +1359,8 @@ async def create_journal_entry(
         raise HTTPException(404, "Parking lot not found")
 
     created_at_clean = strip_tz(data.created_at) if data.created_at else datetime.utcnow()
+    operation = _OP_MAP.get(data.operation.lower(), 'exit')
+    reason = _REASON_MAP.get(data.reason, data.reason)
 
     ins = await db.execute(
         text("""
@@ -1322,9 +1375,9 @@ async def create_journal_entry(
         {
             "created_at": created_at_clean,
             "parking_lot_id": data.parking_lot_id,
-            "operation": data.operation,
+            "operation": operation,
             "grz": data.grz.strip().upper(),
-            "reason": data.reason,
+            "reason": reason,
             "note": data.note or None,
             "ticket_number": data.ticket_number or None,
             "created_by": current_user.id,
@@ -1392,6 +1445,10 @@ async def update_journal_entry(
         updates["created_at"] = strip_tz(updates["created_at"])
     if "grz" in updates:
         updates["grz"] = updates["grz"].strip().upper()
+    if "operation" in updates:
+        updates["operation"] = _OP_MAP.get(updates["operation"].lower(), 'exit')
+    if "reason" in updates:
+        updates["reason"] = _REASON_MAP.get(updates["reason"], updates["reason"])
     if updates:
         set_clause = ", ".join(f"{k} = :{k}" for k in updates)
         updates["_id"] = entry_id

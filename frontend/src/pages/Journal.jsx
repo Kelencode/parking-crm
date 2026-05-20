@@ -63,7 +63,7 @@ function moscowTimeFromISO(isoStr) {
   return `${String(mt.getHours()).padStart(2,'0')}:${String(mt.getMinutes()).padStart(2,'0')}`;
 }
 function emptyDraft() {
-  return { time: getMoscowTime(), parking_lot_id: '', operation: 'exit', grz: '', reason: REASONS[0].value, note: '', ticket_number: '' };
+  return { time: getMoscowTime(), parking_lot_id: '', operation: 'Выезд', grz: '', reason: REASONS[0].value, note: '', ticket_number: '' };
 }
 function entryToVals(e) {
   return {
@@ -94,12 +94,12 @@ function useWindowWidth() {
 function OpToggle({ value, onChange }) {
   return (
     <div style={{ display: 'flex', gap: 3 }}>
-      {[{ val: 'entry', label: '↓ Въезд' }, { val: 'exit', label: '↑ Выезд' }].map(({ val, label }) => (
+      {[{ val: 'Въезд', label: '↓ Въезд' }, { val: 'Выезд', label: '↑ Выезд' }].map(({ val, label }) => (
         <button key={val} type="button"
           style={{
             padding: '2px 8px', fontSize: 11, borderRadius: 4, cursor: 'pointer',
             border: '1px solid var(--c-border)',
-            background: value === val ? (val === 'entry' ? '#1d4ed8' : '#15803d') : 'transparent',
+            background: value === val ? (val === 'Въезд' ? '#1d4ed8' : '#15803d') : 'transparent',
             color: value === val ? '#fff' : 'var(--c-muted)',
             fontWeight: value === val ? 600 : 400,
           }}
@@ -314,7 +314,7 @@ function AddEntryModal({ lots, prefill, onClose, onSaved }) {
   const activeLots = lots.filter(l => l.is_active !== false);
   const [form, setForm] = useState({
     parking_lot_id: prefill?.parking_lot_id ?? '',
-    operation: prefill?.operation ?? 'exit',
+    operation: prefill?.operation ?? 'Выезд',
     grz: '',
     reason: prefill?.reason ?? REASONS[0].value,
     note: prefill?.note ?? '',
@@ -375,7 +375,7 @@ function AddEntryModal({ lots, prefill, onClose, onSaved }) {
           <div className="form-group">
             <label className="form-label">Операция *</label>
             <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
-              {[{ val: 'entry', label: 'Въезд' }, { val: 'exit', label: 'Выезд' }].map(({ val, label }) => (
+              {[{ val: 'Въезд', label: 'Въезд' }, { val: 'Выезд', label: 'Выезд' }].map(({ val, label }) => (
                 <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 14 }}>
                   <input type="radio" name="operation" value={val}
                     checked={form.operation === val} onChange={() => set('operation', val)} />
@@ -660,10 +660,10 @@ export default function Journal() {
 
   // ── Row styles ──────────────────────────────────────────────────────────────
 
-  const ROW_BG = { entry: 'rgba(59,130,246,.1)', exit: 'rgba(34,197,94,.1)' };
+  const ROW_BG = { 'Въезд': 'rgba(59,130,246,.1)', 'Выезд': 'rgba(34,197,94,.1)' };
   const OP_BADGE = {
-    entry: { bg: '#1e3a5f', color: '#93c5fd', label: '↓ Въезд' },
-    exit:  { bg: '#14532d', color: '#86efac', label: '↑ Выезд' },
+    'Въезд': { bg: '#1e3a5f', color: '#93c5fd', label: '↓ Въезд' },
+    'Выезд': { bg: '#14532d', color: '#86efac', label: '↑ Выезд' },
   };
 
   // ── Desktop table ────────────────────────────────────────────────────────────
