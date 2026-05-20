@@ -1307,26 +1307,36 @@ async def create_journal_entry(
     if not lot:
         raise HTTPException(404, "Parking lot not found")
 
-    entry = JournalEntry(
-        parking_lot_id=data.parking_lot_id,
-        operation=data.operation,
-        grz=data.grz.strip().upper(),
-        reason=data.reason,
-        note=data.note or None,
-        ticket_number=data.ticket_number or None,
-        created_by=current_user.id,
-    )
-    if data.created_at:
-        entry.created_at = strip_tz(data.created_at)
+    created_at_clean = strip_tz(data.created_at) if data.created_at else datetime.utcnow()
 
-    db.add(entry)
-    await db.flush()
+    ins = await db.execute(
+        text("""
+            INSERT INTO journal_entries
+                (created_at, parking_lot_id, operation, grz, reason,
+                 note, ticket_number, created_by)
+            VALUES
+                (:created_at, :parking_lot_id, :operation, :grz, :reason,
+                 :note, :ticket_number, :created_by)
+            RETURNING id
+        """),
+        {
+            "created_at": created_at_clean,
+            "parking_lot_id": data.parking_lot_id,
+            "operation": data.operation,
+            "grz": data.grz.strip().upper(),
+            "reason": data.reason,
+            "note": data.note or None,
+            "ticket_number": data.ticket_number or None,
+            "created_by": current_user.id,
+        },
+    )
     await db.commit()
+    entry_id = ins.scalar()
 
     result = await db.execute(
         select(JournalEntry)
         .options(selectinload(JournalEntry.parking_lot), selectinload(JournalEntry.creator))
-        .where(JournalEntry.id == entry.id)
+        .where(JournalEntry.id == entry_id)
     )
     entry_out = result.scalar_one()
 
@@ -1382,9 +1392,14 @@ async def update_journal_entry(
         updates["created_at"] = strip_tz(updates["created_at"])
     if "grz" in updates:
         updates["grz"] = updates["grz"].strip().upper()
-    for field, value in updates.items():
-        setattr(entry, field, value)
-    await db.commit()
+    if updates:
+        set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+        updates["_id"] = entry_id
+        await db.execute(
+            text(f"UPDATE journal_entries SET {set_clause} WHERE id = :_id"),
+            updates,
+        )
+        await db.commit()
     result = await db.execute(
         select(JournalEntry)
         .options(selectinload(JournalEntry.parking_lot), selectinload(JournalEntry.creator))
