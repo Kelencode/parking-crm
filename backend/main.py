@@ -60,12 +60,36 @@ def _migrate(conn) -> None:
         "ALTER TABLE users ADD COLUMN created_at TIMESTAMP",
         "ALTER TABLE parking_lots ADD COLUMN is_active BOOLEAN DEFAULT true",
         "ALTER TABLE parking_lots ADD COLUMN notes TEXT",
+        # PostgreSQL enum migrations for JournalReason (ignored on SQLite)
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Без оплаты(сбой)'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Без оплаты (согласовано)'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Ручное открытие(сбой)'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Инвалид (перезапись)'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Инвалид (ручное)'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Инвалид(не фРИ\\оплата)'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Сотрудник ГЦУП(перезапись)'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Сотрудник ГЦУП(ручное)'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Сотрудник ГЦУП(контролер)'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Спец. Техника'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Абонемент'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Без карты'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Оплата'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Электромобиль'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Утеря парковочной карты'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Социальное такси'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Запись суточного тарифа'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Курсус'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Замятие'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Сервис'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Обслуживание АПС'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'Прочее'",
+        "ALTER TYPE journalreason ADD VALUE IF NOT EXISTS 'КлеверПарк'",
     ]
     for sql in migrations:
         try:
             conn.execute(text(sql))
         except Exception:
-            pass  # колонка уже существует
+            pass  # колонка уже существует или тип не поддерживается
     try:
         conn.execute(text("UPDATE users SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
     except Exception:

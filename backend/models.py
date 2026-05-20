@@ -63,12 +63,37 @@ class JournalOperation(str, PyEnum):
 
 
 class JournalReason(str, PyEnum):
-    disabled  = "Инвалид"
-    staff     = "Сотрудник ГЦУП"
-    manual    = "Ручное открытие (сбой)"
-    ambulance = "Скорая помощь"
-    police    = "Полиция"
-    other     = "Другое"
+    # Legacy values — kept for backward compat with existing records
+    disabled_legacy  = "Инвалид"
+    staff_legacy     = "Сотрудник ГЦУП"
+    manual_legacy    = "Ручное открытие (сбой)"
+    other_legacy     = "Другое"
+    # Current values
+    no_pay_fail      = "Без оплаты(сбой)"
+    no_pay_approved  = "Без оплаты (согласовано)"
+    manual_fail      = "Ручное открытие(сбой)"
+    disabled_rewrite = "Инвалид (перезапись)"
+    disabled_manual  = "Инвалид (ручное)"
+    disabled_no_fri  = "Инвалид(не фРИ\\оплата)"
+    staff_rewrite    = "Сотрудник ГЦУП(перезапись)"
+    staff_manual     = "Сотрудник ГЦУП(ручное)"
+    staff_controller = "Сотрудник ГЦУП(контролер)"
+    spec_tech        = "Спец. Техника"
+    abonement        = "Абонемент"
+    no_card          = "Без карты"
+    ambulance        = "Скорая помощь"
+    payment          = "Оплата"
+    electric_car     = "Электромобиль"
+    lost_card        = "Утеря парковочной карты"
+    social_taxi      = "Социальное такси"
+    daily_tariff     = "Запись суточного тарифа"
+    kursus           = "Курсус"
+    police           = "Полиция"
+    jam              = "Замятие"
+    service          = "Сервис"
+    aps_service      = "Обслуживание АПС"
+    other            = "Прочее"
+    klever_park      = "КлеверПарк"
 
 
 class AuditAction(str, PyEnum):
