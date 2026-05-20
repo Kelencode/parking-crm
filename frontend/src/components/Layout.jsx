@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { connect as wsConnect, disconnect as wsDisconnect, subscribe as wsSubscribe } from '../api/websocket';
 
 const ADMIN_LINKS = [
@@ -36,6 +37,7 @@ const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 export default function Layout() {
   const { user, setUser } = useAuth();
+  const { theme, toggle: toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -134,6 +136,12 @@ export default function Layout() {
             {user?.name || user?.email}<br/>
             <span className="text-sm">{ROLE_LABELS[user?.role] ?? user?.role}</span>
           </div>
+
+          <button className="btn btn-secondary"
+            style={{ width: '100%', marginBottom: 8 }}
+            onClick={toggleTheme}>
+            {theme === 'dark' ? '☀️ Светлая тема' : '🌙 Тёмная тема'}
+          </button>
 
           <button className="btn btn-secondary" style={{ width: '100%' }} onClick={handleLogout}>
             Выйти

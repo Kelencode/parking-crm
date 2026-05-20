@@ -45,7 +45,7 @@ function moscowTimeFromISO(isoStr) {
   return `${String(mt.getHours()).padStart(2,'0')}:${String(mt.getMinutes()).padStart(2,'0')}`;
 }
 function emptyDraft() {
-  return { time: getMoscowTime(), parking_lot_id: '', operation: 'въезд', grz: '', reason: REASONS[0], note: '', ticket_number: '' };
+  return { time: getMoscowTime(), parking_lot_id: '', operation: 'выезд', grz: '', reason: REASONS[0], note: '', ticket_number: '' };
 }
 function entryToVals(e) {
   return {
@@ -507,23 +507,27 @@ export default function Journal() {
   function updDraft(k, v) { setDraft(f => ({ ...f, [k]: v })); }
 
   async function saveDraft() {
-    console.log('[saveDraft]', { parking_lot_id: draft.parking_lot_id, operation: draft.operation, grz: draft.grz, reason: draft.reason, created_at: buildDatetime(dateStr, draft.time) });
+    const payload = {
+      parking_lot_id: parseInt(draft.parking_lot_id, 10),
+      operation: draft.operation,
+      grz: draft.grz.trim().toUpperCase(),
+      reason: draft.reason,
+      created_at: buildDatetime(dateStr, draft.time),
+    };
+    console.log('[saveDraft] payload:', payload);
     if (!isValid(draft)) { setDraftError(true); return; }
     setDraftError(false);
     setDraftSaving(true);
     try {
       await createJournalEntry({
-        parking_lot_id: Number(draft.parking_lot_id),
-        operation: draft.operation,
-        grz: draft.grz.trim().toUpperCase(),
-        reason: draft.reason,
+        ...payload,
         note: draft.note.trim() || null,
         ticket_number: draft.ticket_number.trim() || null,
-        created_at: buildDatetime(dateStr, draft.time),
       });
       setDraft(emptyDraft());
       load();
     } catch (err) {
+      console.error('[saveDraft error]', err.response?.data ?? err.message);
       flash(err.response?.data?.detail ?? 'Ошибка при сохранении');
     } finally {
       setDraftSaving(false);

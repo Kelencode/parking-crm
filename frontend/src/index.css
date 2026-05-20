@@ -22,6 +22,26 @@ html, body { overflow-x: hidden; max-width: 100%; }
 body { min-height: 100vh; }
 #root { min-height: 100vh; }
 
+/* ── Light theme ── */
+html.light-theme {
+  --c-bg:      #ffffff;
+  --c-surface: #f5f5f5;
+  --c-border:  #d0d0d0;
+  --c-text:    #1a1a1a;
+  --c-muted:   #5f5e5a;
+  --c-accent:  #1d4ed8;
+  --color-background-primary:   #ffffff;
+  --color-background-secondary: #f5f5f5;
+  --color-background-tertiary:  #ebebeb;
+  --color-text-primary:         #1a1a1a;
+  --color-text-secondary:       #5f5e5a;
+  --color-border-primary:       #d0d0d0;
+  --color-border-secondary:     #e0e0e0;
+  --color-border-tertiary:      #ebebeb;
+  color: var(--c-text);
+  background: var(--c-bg);
+}
+
 /* ── Layout ── */
 .app-layout {
   display: flex;
