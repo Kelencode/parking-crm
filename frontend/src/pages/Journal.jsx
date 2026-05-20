@@ -51,7 +51,7 @@ function toMoscowISOString(d) {
   return mt.toISOString().slice(0, 16);
 }
 function buildDatetime(dateStr, timeStr) {
-  return `${dateStr}T${timeStr}:00+03:00`;
+  return `${dateStr}T${timeStr}:00`;
 }
 function moscowTimeFromISO(isoStr) {
   const d = new Date(isoStr);
