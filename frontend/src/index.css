@@ -375,6 +375,30 @@ textarea.form-ctrl { resize: vertical; min-height: 80px; }
 .row-editing td { background: rgba(234,179,8,.08) !important; }
 .row-error td   { background: rgba(239,68,68,.1) !important; }
 
+/* ── Parking custom dropdown ── */
+.parking-dropdown {
+  position: absolute;
+  z-index: 200;
+  top: calc(100% + 2px);
+  left: 0;
+  width: 100%;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: 0 4px 16px rgba(0,0,0,.4);
+}
+.parking-option {
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.parking-option:hover { background: rgba(255,255,255,.07); }
+
 /* ── is_repeat badge ── */
 .b-repeat {
   background: #7f1d1d;

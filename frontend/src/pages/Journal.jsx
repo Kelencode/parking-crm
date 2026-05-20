@@ -87,27 +87,79 @@ function OpToggle({ value, onChange }) {
   );
 }
 
+// ── ParkingCombobox ────────────────────────────────────────────────────────────
+
+const LOT_COLOR = { 'город': '#A32D2D', 'перехват': '#185FA5' };
+
+function ParkingCombobox({ lots, value, onChange, onKeyDown }) {
+  const activeLots = lots.filter(l => l.is_active !== false);
+  const [text, setText] = useState('');
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const name = lots.find(l => String(l.id) === String(value))?.name ?? '';
+    setText(name);
+  }, [value, lots]);
+
+  const filtered = activeLots.filter(l =>
+    !text || l.name.toLowerCase().includes(text.toLowerCase())
+  );
+
+  function handleInput(e) {
+    const name = e.target.value;
+    setText(name);
+    setOpen(true);
+    const found = activeLots.find(l => l.name.trim() === name.trim());
+    if (found) onChange(String(found.id));
+  }
+
+  function handleBlur() {
+    setTimeout(() => {
+      const name = lots.find(l => String(l.id) === String(value))?.name ?? '';
+      setText(name);
+      setOpen(false);
+    }, 150);
+  }
+
+  function handleSelect(lot) {
+    onChange(String(lot.id));
+    setText(lot.name);
+    setOpen(false);
+  }
+
+  return (
+    <div style={{ position: 'relative', minWidth: 150 }}>
+      <input
+        className="cell-inp"
+        value={text}
+        onChange={handleInput}
+        onFocus={() => setOpen(true)}
+        onBlur={handleBlur}
+        onKeyDown={onKeyDown}
+        placeholder="Введите или выберите..."
+        autoComplete="off"
+        style={{ width: '100%' }}
+      />
+      {open && filtered.length > 0 && (
+        <div className="parking-dropdown">
+          {filtered.map(lot => (
+            <div key={lot.id} className="parking-option"
+              style={{ color: LOT_COLOR[lot.lot_type] ?? 'var(--c-text)' }}
+              onMouseDown={e => { e.preventDefault(); handleSelect(lot); }}>
+              {lot.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── EditableRow — shared between draft and edit-existing ─────────────────────
 
 function EditableRow({ vals, onChange, onSave, onCancel, onDelete, onBlurRow,
   lots, grzListId, isNew, saving, hasError, isAdmin, creatorName, grzRef, rowId, onLastTab }) {
-  const activeLots = lots.filter(l => l.is_active !== false);
   const rowClass = hasError ? 'row-error' : 'row-editing';
-
-  const [parkingText, setParkingText] = useState('');
-
-  // Sync display text when parking_lot_id or lots change (e.g. copyToDraft, initial load)
-  useEffect(() => {
-    const name = lots.find(l => String(l.id) === String(vals.parking_lot_id))?.name ?? '';
-    setParkingText(name);
-  }, [vals.parking_lot_id, lots]);
-
-  function handleParkingChange(e) {
-    const name = e.target.value;
-    setParkingText(name);
-    const found = activeLots.find(l => l.name.trim() === name.trim());
-    onChange('parking_lot_id', found ? String(found.id) : '');
-  }
 
   function kd(e) {
     if (e.key === 'Enter') { e.preventDefault(); onSave(); }
@@ -127,15 +179,13 @@ function EditableRow({ vals, onChange, onSave, onCancel, onDelete, onBlurRow,
         <input type="time" className="cell-inp" value={vals.time}
           onChange={e => onChange('time', e.target.value)} onKeyDown={kd} />
       </td>
-      {/* Стоянка — combobox */}
+      {/* Стоянка — custom combobox */}
       <td style={{ minWidth: 150 }}>
-        <input
-          list="parking-lots-datalist"
-          className="cell-inp"
-          value={parkingText}
-          onChange={handleParkingChange}
+        <ParkingCombobox
+          lots={lots}
+          value={vals.parking_lot_id}
+          onChange={id => onChange('parking_lot_id', id)}
           onKeyDown={kd}
-          placeholder="Введите или выберите..."
         />
       </td>
       {/* Операция — toggle buttons */}
@@ -343,6 +393,9 @@ export default function Journal() {
   const [showModal, setShowModal]   = useState(false);
   const [prefill, setPrefill]       = useState(null);
 
+  // Copy-flash state
+  const [copiedId, setCopiedId]     = useState(null);
+
   const draftGrzRef = useRef(null);
   const draftRef    = useRef(draft);
   useEffect(() => { draftRef.current = draft; }, [draft]);
@@ -406,7 +459,7 @@ export default function Journal() {
   function updDraft(k, v) { setDraft(f => ({ ...f, [k]: v })); }
 
   async function saveDraft() {
-    console.log('[saveDraft] draft:', { parking_lot_id: draft.parking_lot_id, operation: draft.operation, grz: draft.grz, reason: draft.reason });
+    console.log('[saveDraft]', { parking_lot_id: draft.parking_lot_id, operation: draft.operation, grz: draft.grz, reason: draft.reason, created_at: buildDatetime(dateStr, draft.time) });
     if (!isValid(draft)) { setDraftError(true); return; }
     setDraftError(false);
     setDraftSaving(true);
@@ -500,7 +553,12 @@ export default function Journal() {
       ticket_number: entry.ticket_number || '',
     });
     setDraftError(false);
-    setTimeout(() => draftGrzRef.current?.focus(), 50);
+    setCopiedId(entry.id);
+    setTimeout(() => setCopiedId(null), 1000);
+    setTimeout(() => {
+      document.getElementById('draft-row')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      draftGrzRef.current?.focus();
+    }, 50);
   }
 
   // ── Delete ──────────────────────────────────────────────────────────────────
@@ -616,8 +674,13 @@ export default function Journal() {
                           <div style={{ display: 'flex', gap: 4 }}>
                             <button className="btn btn-sm btn-secondary"
                               title="Скопировать строку"
-                              style={{ padding: '2px 8px', minHeight: 0, fontSize: 14 }}
-                              onClick={e => { e.stopPropagation(); copyToDraft(entry); }}>⎘</button>
+                              style={{
+                                padding: '2px 8px', minHeight: 0, fontSize: 14,
+                                ...(copiedId === entry.id ? { background: '#15803d', color: '#fff', borderColor: '#15803d' } : {}),
+                              }}
+                              onClick={e => { e.stopPropagation(); copyToDraft(entry); }}>
+                              {copiedId === entry.id ? '✓' : '⎘'}
+                            </button>
                             {isAdmin && (
                               <button className="btn btn-sm btn-danger"
                                 style={{ padding: '2px 8px', minHeight: 0 }}
@@ -655,12 +718,9 @@ export default function Journal() {
           </table>
         </div>
 
-        {/* Datalists */}
+        {/* GRZ autocomplete datalist */}
         <datalist id="grz-list">
           {grzList.map(g => <option key={g} value={g} />)}
-        </datalist>
-        <datalist id="parking-lots-datalist">
-          {activeLots.map(l => <option key={l.id} value={l.name} />)}
         </datalist>
       </div>
     );
