@@ -42,10 +42,7 @@ function localDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 function getMoscowTime() {
-  const now = new Date();
-  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-  const moscow = new Date(utc + 3 * 60 * 60 * 1000);
-  return moscow.toTimeString().slice(0, 5);
+  return new Date().toTimeString().slice(0, 5);
 }
 function toMoscowISOString(d) {
   const moscowOffset = 3 * 60;
@@ -462,8 +459,6 @@ export default function Journal() {
   const [copiedId, setCopiedId]     = useState(null);
 
   const draftGrzRef = useRef(null);
-  const draftRef    = useRef(draft);
-  useEffect(() => { draftRef.current = draft; }, [draft]);
 
   const todayStr = localDateStr(new Date());
   const dateStr  = localDateStr(selectedDate);
@@ -557,19 +552,7 @@ export default function Journal() {
   }
 
   function handleDraftBlur() {
-    setTimeout(() => {
-      const active = document.activeElement;
-      const row = document.getElementById('draft-row');
-      const portal = document.querySelector('.parking-dropdown');
-      if (row?.contains(active)) return;
-      if (portal?.contains(active)) return;
-      const d = draftRef.current;
-      const valid = d.parking_lot_id && d.operation && d.grz?.trim() && d.reason;
-      if (!valid) {
-        setDraft(emptyDraft());
-        setDraftError(false);
-      }
-    }, 300);
+    // Draft persists on blur — user must explicitly save (Enter/✓) or cancel (Esc/✕)
   }
 
   // ── Edit existing row handlers ──────────────────────────────────────────────
