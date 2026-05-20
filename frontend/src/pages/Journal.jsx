@@ -95,9 +95,10 @@ function OpToggle({ value, onChange }) {
           style={{
             padding: '2px 8px', fontSize: 11, borderRadius: 4, cursor: 'pointer',
             border: '1px solid var(--c-border)',
-            background: value === val ? (val === 'Въезд' ? '#1d4ed8' : '#15803d') : 'transparent',
-            color: value === val ? '#fff' : 'var(--c-muted)',
+            background: value === val ? 'var(--c-border)' : 'transparent',
+            color: 'var(--c-text)',
             fontWeight: value === val ? 600 : 400,
+            borderColor: value === val ? 'var(--c-muted)' : 'var(--c-border)',
           }}
           onClick={() => onChange(val)}>
           {label}
@@ -285,8 +286,8 @@ function EditableRow({ vals, onChange, onSave, onCancel, onDelete, onBlurRow,
       {/* Действия */}
       <td>
         <div style={{ display: 'flex', gap: 4 }}>
-          <button type="button" className="btn btn-sm btn-primary"
-            style={{ padding: '2px 8px', minHeight: 0 }}
+          <button type="button" className="btn btn-sm"
+            style={{ padding: '2px 8px', minHeight: 0, background: '#2e7d32', color: '#fff', border: '1px solid #2e7d32' }}
             onClick={onSave} disabled={saving}>
             {saving ? '…' : '✓'}
           </button>
