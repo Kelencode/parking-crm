@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   getJournal, createJournalEntry, updateJournalEntry,
@@ -100,6 +101,8 @@ function ParkingCombobox({ lots, value, onChange, onKeyDown }) {
   const activeLots = lots.filter(l => l.is_active !== false);
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
+  const [dropPos, setDropPos] = useState(null);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     const name = lots.find(l => String(l.id) === String(value))?.name ?? '';
@@ -107,12 +110,28 @@ function ParkingCombobox({ lots, value, onChange, onKeyDown }) {
   }, [value, lots]);
 
   const filtered = activeLots.filter(l =>
-    !text || l.name.toLowerCase().includes(text.toLowerCase())
+    !text.trim() || l.name.toLowerCase().includes(text.toLowerCase())
   );
+
+  function calcPos() {
+    if (!inputRef.current) return null;
+    const rect = inputRef.current.getBoundingClientRect();
+    return {
+      top: rect.bottom + window.scrollY,
+      left: rect.left + window.scrollX,
+      width: Math.max(rect.width, 250),
+    };
+  }
+
+  function handleFocus() {
+    setDropPos(calcPos());
+    setOpen(true);
+  }
 
   function handleInput(e) {
     const name = e.target.value;
     setText(name);
+    setDropPos(calcPos());
     setOpen(true);
     const found = activeLots.find(l => l.name.trim() === name.trim());
     if (found) onChange(String(found.id));
@@ -126,35 +145,59 @@ function ParkingCombobox({ lots, value, onChange, onKeyDown }) {
     }, 150);
   }
 
-  function handleSelect(lot) {
+  function selectLot(lot) {
     onChange(String(lot.id));
     setText(lot.name);
     setOpen(false);
   }
 
   return (
-    <div style={{ position: 'relative', minWidth: 150 }}>
+    <div style={{ minWidth: 150 }}>
       <input
+        ref={inputRef}
         className="cell-inp"
         value={text}
         onChange={handleInput}
-        onFocus={() => setOpen(true)}
+        onFocus={handleFocus}
         onBlur={handleBlur}
         onKeyDown={onKeyDown}
         placeholder="Введите или выберите..."
         autoComplete="off"
         style={{ width: '100%' }}
       />
-      {open && filtered.length > 0 && (
-        <div className="parking-dropdown">
+      {open && dropPos && filtered.length > 0 && createPortal(
+        <div
+          onMouseDown={e => e.preventDefault()}
+          style={{
+            position: 'absolute',
+            top: dropPos.top + 2,
+            left: dropPos.left,
+            width: dropPos.width,
+            zIndex: 99999,
+            background: 'var(--c-surface)',
+            border: '1px solid var(--c-border)',
+            borderRadius: 6,
+            maxHeight: 200,
+            overflowY: 'auto',
+            boxShadow: '0 4px 16px rgba(0,0,0,.4)',
+          }}
+        >
           {filtered.map(lot => (
-            <div key={lot.id} className="parking-option"
-              style={{ color: LOT_COLOR[lot.lot_type] ?? 'var(--c-text)' }}
-              onMouseDown={e => { e.preventDefault(); handleSelect(lot); }}>
+            <div key={lot.id}
+              onMouseDown={() => selectLot(lot)}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,.07)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              style={{
+                padding: '7px 12px',
+                cursor: 'pointer',
+                fontSize: 13,
+                color: LOT_COLOR[lot.lot_type] ?? 'var(--c-text)',
+              }}>
               {lot.name}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
