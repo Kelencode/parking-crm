@@ -38,8 +38,10 @@ from utils import calculate_priority, log_action
 # ---------- Journal operation / reason maps ----------
 
 _OP_MAP = {
-    'въезд': 'entry', 'выезд': 'exit',
-    'entry': 'entry', 'exit': 'exit',
+    'въезд': 'entry',  'выезд': 'exit',
+    'entry': 'entry',  'exit':  'exit',
+    'Въезд': 'entry',  'Выезд': 'exit',
+    'ВЪЕЗД': 'entry',  'ВЫЕЗД': 'exit',
 }
 
 _REASON_MAP = {
@@ -429,7 +431,8 @@ class JournalEntryOut(BaseModel):
     @classmethod
     def _normalize_op(cls, v):
         raw = v.value if hasattr(v, 'value') else str(v)
-        return _OP_DISPLAY.get(raw, _OP_DISPLAY.get(raw.lower(), raw))
+        english = _OP_MAP.get(raw, _OP_MAP.get(raw.lower(), raw))
+        return _OP_DISPLAY.get(english, english)
 
     @field_validator('reason', mode='before')
     @classmethod
@@ -1341,7 +1344,12 @@ async def list_journal(
         query = query.where(JournalEntry.reason == reason)
     query = query.order_by(JournalEntry.created_at.desc()).limit(limit).offset(offset)
     result = await db.execute(query)
-    return result.scalars().all()
+    entries = result.scalars().all()
+    op_display = {'entry': 'Въезд', 'exit': 'Выезд', 'въезд': 'Въезд', 'выезд': 'Выезд',
+                  'Въезд': 'Въезд', 'Выезд': 'Выезд'}
+    for e in entries:
+        e.operation = op_display.get(e.operation, e.operation)
+    return entries
 
 
 @app.post("/journal", response_model=JournalEntryOut, status_code=201)
