@@ -28,7 +28,7 @@ from database import Base, engine, get_db, settings
 from models import (
     AuditAction, AuditLog,
     Incident, IncidentPriority, IncidentStatus, IncidentType,
-    JournalEntry, JournalOperation, JournalReason,
+    JournalEntry,
     LotType, Software,
     ParkingLot, ShiftNote, ShiftSnapshot, User, UserRole,
 )
@@ -1317,8 +1317,8 @@ async def list_journal(
     date_from:      Optional[str]              = None,
     date_to:        Optional[str]              = None,
     parking_lot_id: Optional[int]              = None,
-    operation:      Optional[JournalOperation] = None,
-    reason:         Optional[JournalReason]    = None,
+    operation:      Optional[str]              = None,
+    reason:         Optional[str]              = None,
     limit:          int                        = Query(default=200, le=1000),
     offset:         int                        = 0,
     db: AsyncSession = Depends(get_db),
